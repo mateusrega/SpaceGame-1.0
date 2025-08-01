@@ -1,5 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>SpaceGame Mobile 1.0</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      background: black;
+      -webkit-touch-callout: none; /* Desabilita seleção texto no iOS */
+      -webkit-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent; /* Remove highlight */
+      touch-action: manipulation;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: black;
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: lime;
+      font-family: monospace;
+      font-size: 16px;
+      background: rgba(0,0,0,0.5);
+      padding: 8px;
+      border: 1px solid lime;
+      border-radius: 6px;
+      z-index: 100;
+      max-width: 200px;
+    }
+    /* Container dos botões touch */
+    #touch-controls {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      width: 140px;
+      gap: 10px;
+      z-index: 100;
+    }
+    .btn-touch {
+      background-color: #222;
+      color: lime;
+      border: none;
+      border-radius: 12px;
+      font-weight: bold;
+      font-size: 16px;
+      width: 60px;
+      height: 60px;
+      text-align: center;
+      line-height: 60px;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      cursor: pointer;
+      box-shadow: 0 0 6px lime;
+      touch-action: none;
+    }
+    .btn-touch:active {
+      background-color: lime;
+      color: black;
+      box-shadow: none;
+    }
+  </style>
+</head>
 <body>
   <canvas id="canvas"></canvas>
+
   <div id="hud">
     <div id="velocidade">Velocidade: 0</div>
     <div id="coordX">X: 0</div>
@@ -7,444 +82,429 @@
     <div id="turbo"></div>
   </div>
 
-  <!-- Controles Touch -->
-  <style>
-    #touch-controls {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      width: 200px;
-      height: 200px;
-      user-select: none;
-      touch-action: none;
-      z-index: 1000;
-    }
-    .btn {
-      position: absolute;
-      background: rgba(0, 255, 0, 0.3);
-      border-radius: 50%;
-      touch-action: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #btn-up {
-      width: 60px;
-      height: 60px;
-      left: 70px;
-      top: 0;
-    }
-    #btn-down {
-      width: 60px;
-      height: 60px;
-      left: 70px;
-      bottom: 0;
-    }
-    #btn-left {
-      width: 60px;
-      height: 60px;
-      left: 0;
-      top: 70px;
-    }
-    #btn-right {
-      width: 60px;
-      height: 60px;
-      right: 0;
-      top: 70px;
-    }
-    #btn-turbo {
-      position: fixed;
-      bottom: 30px;
-      right: 30px;
-      width: 80px;
-      height: 80px;
-      background: rgba(0, 191, 255, 0.4);
-      border-radius: 50%;
-      touch-action: none;
-      font-weight: bold;
-      color: white;
-      font-size: 16px;
-      line-height: 80px;
-      text-align: center;
-      user-select: none;
-      z-index: 1000;
-    }
-  </style>
+  <!-- Botões Touch -->
   <div id="touch-controls">
-    <div id="btn-up" class="btn"></div>
-    <div id="btn-down" class="btn"></div>
-    <div id="btn-left" class="btn"></div>
-    <div id="btn-right" class="btn"></div>
+    <div id="btnLeft" class="btn-touch">←</div>
+    <div id="btnRight" class="btn-touch">→</div>
+    <div id="btnUp" class="btn-touch">↑</div>
+    <div id="btnDown" class="btn-touch">↓</div>
+    <div id="btnTurbo" class="btn-touch">TURBO</div>
+    <div id="btnMinimap" class="btn-touch">MAP</div>
+    <div id="btnPause" class="btn-touch">PAUSA</div>
+    <div id="btnReset" class="btn-touch">RESET</div>
   </div>
-  <div id="btn-turbo">TURBO</div>
 
-  <script>
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  // Ajusta canvas para o tamanho da tela (CSS full screen já faz o resize visual, aqui ajusta o real)
+  function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
 
-    const keys = {};
-    window.addEventListener("keydown", e => keys[e.key] = true);
-    window.addEventListener("keyup", e => keys[e.key] = false);
+  // Estados do jogo
+  const worldRadius = 100000;
+  const player = { x: 0, y: 0, vx: 0, vy: 0, angle: 11 };
+  let maxSpeed = 50;
 
-    // Controles touch para simular teclado
-    function setupTouchButton(id, key) {
-      const btn = document.getElementById(id);
-      btn.addEventListener("touchstart", e => {
+  // Controle por teclado e toque
+  const keys = {};
+
+  // Função para setar tecla virtual
+  function setKey(key, value) {
+    keys[key] = value;
+  }
+
+  // Mapeamento teclado para controlar nave
+  window.addEventListener("keydown", e => {
+    keys[e.key] = true;
+  });
+  window.addEventListener("keyup", e => {
+    keys[e.key] = false;
+  });
+
+  // Botões touch: adiciona eventos para simular as teclas usadas antes
+  // Controle: ArrowLeft, ArrowRight, ArrowUp, ArrowDown, 'n' para turbo, 'p' para pausa
+
+  // Mapeia os botões touch para as teclas correspondentes:
+  const btnMap = {
+    btnLeft: "ArrowLeft",
+    btnRight: "ArrowRight",
+    btnUp: "ArrowUp",
+    btnDown: "ArrowDown",
+    btnTurbo: "n",
+    btnPause: "p",
+    btnReset: "r",
+    btnMinimap: "m"
+  };
+
+  // Variáveis para estados
+  let turboEnabled = false;
+  let minimapEnabled = false;
+  let paused = false;
+
+  // Função para atualizar texto do botão de pausa
+  const btnPause = document.getElementById("btnPause");
+  const btnTurbo = document.getElementById("btnTurbo");
+  const btnMinimap = document.getElementById("btnMinimap");
+
+  // Atualiza estado turbo (botão e variável)
+  function toggleTurbo() {
+    turboEnabled = !turboEnabled;
+    btnTurbo.textContent = turboEnabled ? "TURBO ON" : "TURBO";
+  }
+  // Atualiza estado pausa
+  function togglePause() {
+    paused = !paused;
+    btnPause.textContent = paused ? "CONTINUAR" : "PAUSA";
+    if (!paused) loop();
+  }
+  // Atualiza estado minimap
+  function toggleMinimap() {
+    minimapEnabled = !minimapEnabled;
+    btnMinimap.textContent = minimapEnabled ? "MAP ON" : "MAP";
+  }
+  // Reseta player
+  function resetPlayer() {
+    player.x = 0; player.y = 0; player.vx = 0; player.vy = 0; player.angle = 0;
+  }
+
+  // Botões touch comportamento
+  Object.keys(btnMap).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const key = btnMap[id];
+
+    if (key === 'n') {
+      // turbo é toggle no clique
+      el.addEventListener("click", toggleTurbo);
+    } else if (key === 'p') {
+      // pausa toggle no clique
+      el.addEventListener("click", togglePause);
+    } else if (key === 'm') {
+      // minimap toggle no clique
+      el.addEventListener("click", toggleMinimap);
+    } else if (key === 'r') {
+      el.addEventListener("click", resetPlayer);
+    } else {
+      // setar tecla true no touchstart e false no touchend para controles de movimento
+      el.addEventListener("touchstart", e => {
         e.preventDefault();
         keys[key] = true;
       });
-      btn.addEventListener("touchend", e => {
+      el.addEventListener("touchend", e => {
         e.preventDefault();
         keys[key] = false;
       });
-      btn.addEventListener("touchcancel", e => {
+      // Também mouse para teste desktop
+      el.addEventListener("mousedown", e => {
+        e.preventDefault();
+        keys[key] = true;
+      });
+      el.addEventListener("mouseup", e => {
+        e.preventDefault();
+        keys[key] = false;
+      });
+      el.addEventListener("mouseleave", e => {
         e.preventDefault();
         keys[key] = false;
       });
     }
-    setupTouchButton("btn-up", "ArrowUp");
-    setupTouchButton("btn-down", "ArrowDown");
-    setupTouchButton("btn-left", "ArrowLeft");
-    setupTouchButton("btn-right", "ArrowRight");
+  });
 
-    // Turbo
-    const btnTurbo = document.getElementById("btn-turbo");
-    btnTurbo.addEventListener("touchstart", e => {
-      e.preventDefault();
-      keys["n"] = true;
+  // Estrelas
+  const stars = [];
+  const starDensity = 1.25e-5;
+  const totalStars = Math.floor((worldRadius * 2) ** 2 * starDensity);
+  for (let i = 0; i < totalStars; i++) {
+    stars.push({
+      x: (Math.random() - 0.5) * worldRadius * 2,
+      y: (Math.random() - 0.5) * worldRadius * 2,
+      size: Math.random() * 5 + 1
     });
-    btnTurbo.addEventListener("touchend", e => {
-      e.preventDefault();
-      keys["n"] = false;
-    });
-    btnTurbo.addEventListener("touchcancel", e => {
-      e.preventDefault();
-      keys["n"] = false;
-    });
+  }
 
-    // Seu código do jogo (copy paste o que você já tem abaixo)
+  // Sol e planetas
+  const sun = { x: 50000, y: 50000, mass: 2000, radius: 1500 };
+  const planets = [
+    { name: "Mercúrio", distance: 6000, speed: 0.0003, angle: Math.random() * Math.PI * 2, radius: 200, color: "gray", mass: 30 },
+    { name: "Vênus", distance: 10000, speed: 0.0002, angle: Math.random() * Math.PI * 2, radius: 350, color: "gold", mass: 40 },
+    { name: "Terra", distance: 14000, speed: 0.00015, angle: Math.random() * Math.PI * 2, radius: 400, color: "blue", mass: 40 },
+    { name: "Marte", distance: 18000, speed: 0.00012, angle: Math.random() * Math.PI * 2, radius: 300, color: "red", mass: 26 }
+  ];
 
-    const worldRadius = 100000;
-    const player = {
-      x: 0,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      angle: 11
+  function update() {
+    if (paused) return;
+
+    const friction = 0.999;
+    const acceleration = turboEnabled ? 2 : 0.5;
+    maxSpeed = turboEnabled ? 200 : 50;
+
+    if (keys["ArrowUp"]) {
+      player.vx += Math.cos(player.angle) * acceleration;
+      player.vy += Math.sin(player.angle) * acceleration;
+    }
+    if (keys["ArrowDown"]) {
+      player.vx -= Math.cos(player.angle) * acceleration * 0.6;
+      player.vy -= Math.sin(player.angle) * acceleration * 0.6;
+    }
+    if (keys["b"]) {
+      player.vx *= 0.90;
+      player.vy *= 0.90;
+    }
+    if (keys["ArrowLeft"]) player.angle -= 0.05;
+    if (keys["ArrowRight"]) player.angle += 0.05;
+
+    let speed = Math.hypot(player.vx, player.vy);
+    if (speed > maxSpeed) {
+      let scale = maxSpeed / speed;
+      player.vx *= scale;
+      player.vy *= scale;
+    }
+
+    const G = 500;
+    const applyGravity = (m, x, y) => {
+      const dx = x - player.x;
+      const dy = y - player.y;
+      const distSq = dx * dx + dy * dy;
+      const dist = Math.sqrt(distSq);
+      if (dist > 20) {
+        const force = (G * m) / distSq;
+        player.vx += (dx / dist) * force;
+        player.vy += (dy / dist) * force;
+      }
     };
 
-    let maxSpeed = 50;
-    let minimapEnabled = false;
-    window.addEventListener("keydown", e => {
-      if (e.key.toLowerCase() === "m") minimapEnabled = !minimapEnabled;
-    });
-
-    const stars = [];
-    const starDensity = 1.25e-5;
-    const totalStars = Math.floor((worldRadius * 2) ** 2 * starDensity);
-    for (let i = 0; i < totalStars; i++) {
-      stars.push({
-        x: (Math.random() - 0.5) * worldRadius * 2,
-        y: (Math.random() - 0.5) * worldRadius * 2,
-        size: Math.random() * 5 + 1
-      });
+    applyGravity(sun.mass, sun.x, sun.y);
+    for (let planet of planets) {
+      const px = sun.x + planet.distance * Math.cos(planet.angle);
+      const py = sun.y + planet.distance * Math.sin(planet.angle);
+      applyGravity(planet.mass, px, py);
     }
 
-    const sun = { x: 50000, y: 50000, mass: 2000, radius: 1500 };
-    const planets = [
-      { name: "Mercúrio", distance: 6000, speed: 0.0003, angle: Math.random() * Math.PI * 2, radius: 200, color: "gray", mass: 30 },
-      { name: "Vênus", distance: 10000, speed: 0.0002, angle: Math.random() * Math.PI * 2, radius: 350, color: "gold", mass: 40 },
-      { name: "Terra", distance: 14000, speed: 0.00015, angle: Math.random() * Math.PI * 2, radius: 400, color: "blue", mass: 40 },
-      { name: "Marte", distance: 18000, speed: 0.00012, angle: Math.random() * Math.PI * 2, radius: 300, color: "red", mass: 26 }
-    ];
+    player.vx *= friction;
+    player.vy *= friction;
+    player.x += player.vx;
+    player.y += player.vy;
 
-    function update() {
-      const friction = 0.999;
-      const turbo = keys["n"];
-      const acceleration = turbo ? 2 : 0.5;
-      maxSpeed = turbo ? 200 : 50;
+    const distSun = Math.hypot(player.x - sun.x, player.y - sun.y);
+    if (distSun < sun.radius) {
+      const angleOut = Math.atan2(player.y - sun.y, player.x - sun.x);
+      player.x = sun.x + Math.cos(angleOut) * (sun.radius + 1);
+      player.y = sun.y + Math.sin(angleOut) * (sun.radius + 1);
+      player.vx = 0;
+      player.vy = 0;
+    }
 
-      if (keys["ArrowUp"]) {
-        player.vx += Math.cos(player.angle) * acceleration;
-        player.vy += Math.sin(player.angle) * acceleration;
-      }
-      if (keys["ArrowDown"]) {
-        player.vx -= Math.cos(player.angle) * acceleration * 0.6;
-        player.vy -= Math.sin(player.angle) * acceleration * 0.6;
-      }
-      if (keys["b"]) {
-        player.vx *= 0.90;
-        player.vy *= 0.90;
-      }
-      if (keys["ArrowLeft"]) player.angle -= 0.05;
-      if (keys["ArrowRight"]) player.angle += 0.05;
+    for (let planet of planets) {
+      const px = sun.x + planet.distance * Math.cos(planet.angle);
+      const py = sun.y + planet.distance * Math.sin(planet.angle);
+      const d = Math.hypot(player.x - px, player.y - py);
 
-      // Limit speed
-      let speed = Math.hypot(player.vx, player.vy);
-      if (speed > maxSpeed) {
-        let scale = maxSpeed / speed;
-        player.vx *= scale;
-        player.vy *= scale;
-      }
+      if (d < planet.radius) {
+        const angleOut = Math.atan2(player.y - py, player.x - px);
+        player.x = px + Math.cos(angleOut) * planet.radius;
+        player.y = py + Math.sin(angleOut) * planet.radius;
 
-      // Gravidade
-      const G = 500;
-      const applyGravity = (m, x, y) => {
-        const dx = x - player.x;
-        const dy = y - player.y;
-        const distSq = dx * dx + dy * dy;
-        const dist = Math.sqrt(distSq);
-        if (dist > 20) {
-          const force = (G * m) / distSq;
-          player.vx += (dx / dist) * force;
-          player.vy += (dy / dist) * force;
-        }
-      };
+        const orbitalVx = -Math.sin(planet.angle) * planet.speed * planet.distance;
+        const orbitalVy = Math.cos(planet.angle) * planet.speed * planet.distance;
 
-      applyGravity(sun.mass, sun.x, sun.y);
-      for (let planet of planets) {
-        const px = sun.x + planet.distance * Math.cos(planet.angle);
-        const py = sun.y + planet.distance * Math.sin(planet.angle);
-        applyGravity(planet.mass, px, py);
-      }
+        player.vx += (orbitalVx - player.vx) * 0.1;
+        player.vy += (orbitalVy - player.vy) * 0.1;
 
-      // Atualiza posição do jogador
-      player.vx *= friction;
-      player.vy *= friction;
-      player.x += player.vx;
-      player.y += player.vy;
-
-      // Colisão com Sol
-      const distSun = Math.hypot(player.x - sun.x, player.y - sun.y);
-      if (distSun < sun.radius) {
-        const angleOut = Math.atan2(player.y - sun.y, player.x - sun.x);
-        player.x = sun.x + Math.cos(angleOut) * (sun.radius + 1);
-        player.y = sun.y + Math.sin(angleOut) * (sun.radius + 1);
-        player.vx = 0;
-        player.vy = 0;
-      }
-
-      // Colisão e aderência com planetas
-      for (let planet of planets) {
-        const px = sun.x + planet.distance * Math.cos(planet.angle);
-        const py = sun.y + planet.distance * Math.sin(planet.angle);
-        const d = Math.hypot(player.x - px, player.y - py);
-
-        if (d < planet.radius) {
-          // Corrigir posição na superfície do planeta
-          const angleOut = Math.atan2(player.y - py, player.x - px);
-          player.x = px + Math.cos(angleOut) * planet.radius;
-          player.y = py + Math.sin(angleOut) * planet.radius;
-
-          // Calcular velocidade tangencial do planeta (orbital)
-          const orbitalVx = -Math.sin(planet.angle) * planet.speed * planet.distance;
-          const orbitalVy = Math.cos(planet.angle) * planet.speed * planet.distance;
-
-          // Aderência e atrito para \"grudar\"
-          player.vx += (orbitalVx - player.vx) * 0.1;
-          player.vy += (orbitalVy - player.vy) * 0.1;
-
-          // Atrito extra
-          player.vx *= 0.98;
-          player.vy *= 0.98;
-        }
-      }
-
-      // Detecção e resposta de colisão com a borda do mundo
-      if (player.x < -worldRadius) {
-        player.x = -worldRadius + 1000;
-        player.vx *= -1;
-      }
-      if (player.x > worldRadius) {
-        player.x = worldRadius - 1000;
-        player.vx *= -1;
-      }
-      if (player.y < -worldRadius) {
-        player.y = -worldRadius + 1000;
-        player.vy *= -1;
-      }
-      if (player.y > worldRadius) {
-        player.y = worldRadius - 1000;
-        player.vy *= -1;
+        player.vx *= 0.98;
+        player.vy *= 0.98;
       }
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const offsetX = canvas.width / 2 - player.x;
-      const offsetY = canvas.height / 2 - player.y;
-
-      // Grade
-      const gridSpacing = 500;
-      ctx.strokeStyle = "#222";
-      ctx.lineWidth = 0.5;
-      for (let x = -worldRadius; x <= worldRadius; x += gridSpacing) {
-        ctx.beginPath();
-        ctx.moveTo(x + offsetX, 0);
-        ctx.lineTo(x + offsetX, canvas.height);
-        ctx.stroke();
-      }
-      for (let y = -worldRadius; y <= worldRadius; y += gridSpacing) {
-        ctx.beginPath();
-        ctx.moveTo(0, y + offsetY);
-        ctx.lineTo(canvas.width, y + offsetY);
-        ctx.stroke();
-      }
-
-      // Estrelas
-      ctx.fillStyle = "white";
-      for (let star of stars) {
-        const sx = star.x + offsetX;
-        const sy = star.y + offsetY;
-        if (sx >= 0 && sx <= canvas.width && sy >= 0 && sy <= canvas.height) {
-          ctx.beginPath();
-          ctx.arc(sx, sy, star.size, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-
-      // Sol
-      ctx.beginPath();
-      ctx.arc(sun.x + offsetX, sun.y + offsetY, sun.radius, 0, Math.PI * 2);
-      ctx.fillStyle = "yellow";
-      ctx.fill();
-
-      // Planetas
-      for (let planet of planets) {
-        planet.angle += planet.speed;
-        const x = sun.x + planet.distance * Math.cos(planet.angle);
-        const y = sun.y + planet.distance * Math.sin(planet.angle);
-        ctx.beginPath();
-        ctx.arc(x + offsetX, y + offsetY, planet.radius, 0, Math.PI * 2);
-        ctx.fillStyle = planet.color;
-        ctx.fill();
-      }
-
-      // Nave
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(player.angle);
-      ctx.fillStyle = "lime";
-      ctx.beginPath();
-      ctx.moveTo(15, 0);
-      ctx.lineTo(-10, -7);
-      ctx.lineTo(-10, 7);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-
-      drawBorderEffect();
-      drawHUD();
-      if (minimapEnabled) drawMinimap();
+    if (player.x < -worldRadius) {
+      player.x = -worldRadius + 1000;
+      player.vx *= -1;
     }
-
-    function drawBorderEffect() {
-      const maxEffectDistance = 1000;
-
-      // Distância mínima até a borda do mundo
-      const distToLeft = player.x + worldRadius;
-      const distToRight = worldRadius - player.x;
-      const distToTop = player.y + worldRadius;
-      const distToBottom = worldRadius - player.y;
-
-      const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-
-      // Se estiver dentro da zona de transição (até 1000 da borda)
-      if (minDist < maxEffectDistance) {
-        const opacity = 1 - minDist / maxEffectDistance;
-        ctx.fillStyle = `rgba(128, 0, 128, ${Math.max(0, Math.min(1, opacity))})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
+    if (player.x > worldRadius) {
+      player.x = worldRadius - 1000;
+      player.vx *= -1;
     }
-
-    function drawHUD() {
-      document.getElementById("velocidade").textContent =
-        "Velocidade: " + Math.hypot(player.vx, player.vy).toFixed(2);
-      document.getElementById("coordX").textContent =
-        "X: " + player.x.toFixed(1);
-      document.getElementById("coordY").textContent =
-        "Y: " + player.y.toFixed(1);
-      const turboEl = document.getElementById("turbo");
-      if (keys["n"]) {
-        turboEl.textContent = "TURBO";
-        turboEl.style.color = "deepskyblue";
-      } else {
-        turboEl.textContent = "";
-      }
+    if (player.y < -worldRadius) {
+      player.y = -worldRadius + 1000;
+      player.vy *= -1;
     }
+    if (player.y > worldRadius) {
+      player.y = worldRadius - 1000;
+      player.vy *= -1;
+    }
+  }
 
-    function drawMinimap() {
-      const radius = 100;
-      const scale = radius / 10000;
-      const centerX = canvas.width - radius - 20;
-      const centerY = radius + 20;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Cálculo do deslocamento entre jogador e Sol
-      const dx = player.x - sun.x;
-      const dy = player.y - sun.y;
+    const offsetX = canvas.width / 2 - player.x;
+    const offsetY = canvas.height / 2 - player.y;
 
-      ctx.save();
+    const gridSpacing = 500;
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 0.5;
+
+    for (let x = -worldRadius; x <= worldRadius; x += gridSpacing) {
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.clip();
-
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-      ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
-
-      // Sol (tamanho proporcional com limite mínimo de 3px)
-      ctx.fillStyle = "yellow";
+      ctx.moveTo(x + offsetX, 0);
+      ctx.lineTo(x + offsetX, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = -worldRadius; y <= worldRadius; y += gridSpacing) {
       ctx.beginPath();
-      ctx.arc(
-        centerX - dx * scale,
-        centerY - dy * scale,
-        Math.max(sun.radius * scale, 3),
-        0, Math.PI * 2
-      );
-      ctx.fill();
-
-      // Planetas (tamanho proporcional com mínimo de 2px)
-      for (let planet of planets) {
-        const px = sun.x + planet.distance * Math.cos(planet.angle);
-        const py = sun.y + planet.distance * Math.sin(planet.angle);
-
-        ctx.fillStyle = planet.color;
-        ctx.beginPath();
-        ctx.arc(
-          centerX + (px - player.x) * scale,
-          centerY + (py - player.y) * scale,
-          Math.max(planet.radius * scale, 2),
-          0, Math.PI * 2
-        );
-        ctx.fill();
-      }
-      // Nave (sempre no centro)
-      ctx.fillStyle = "lime";
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.restore();
-
-      // Contorno
-      ctx.strokeStyle = "white";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.moveTo(0, y + offsetY);
+      ctx.lineTo(canvas.width, y + offsetY);
       ctx.stroke();
     }
 
-    function loop() {
-      update();
-      draw();
-      requestAnimationFrame(loop);
+    ctx.fillStyle = "white";
+    for (let star of stars) {
+      const sx = star.x + offsetX;
+      const sy = star.y + offsetY;
+      if (sx >= 0 && sx <= canvas.width && sy >= 0 && sy <= canvas.height) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, star.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
-    loop();
+    ctx.beginPath();
+    ctx.arc(sun.x + offsetX, sun.y + offsetY, sun.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "yellow";
+    ctx.fill();
 
-    // Redimensionar canvas ao mudar tamanho da janela/tablet
-    window.addEventListener("resize", () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    });
-  </script>
+    for (let planet of planets) {
+      planet.angle += planet.speed;
+      const x = sun.x + planet.distance * Math.cos(planet.angle);
+      const y = sun.y + planet.distance * Math.sin(planet.angle);
+      ctx.beginPath();
+      ctx.arc(x + offsetX, y + offsetY, planet.radius, 0, Math.PI * 2);
+      ctx.fillStyle = planet.color;
+      ctx.fill();
+    }
+
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(player.angle);
+    ctx.fillStyle = "lime";
+    ctx.beginPath();
+    ctx.moveTo(15, 0);
+    ctx.lineTo(-10, -7);
+    ctx.lineTo(-10, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    drawBorderEffect();
+    drawHUD();
+    if (minimapEnabled) drawMinimap();
+  }
+
+  function drawBorderEffect() {
+    const maxEffectDistance = 1000;
+
+    const distToLeft = player.x + worldRadius;
+    const distToRight = worldRadius - player.x;
+    const distToTop = player.y + worldRadius;
+    const distToBottom = worldRadius - player.y;
+
+    const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+
+    if (minDist < maxEffectDistance) {
+      const opacity = 1 - minDist / maxEffectDistance;
+      ctx.fillStyle = `rgba(128, 0, 128, ${Math.max(0, Math.min(1, opacity))})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function drawHUD() {
+    document.getElementById("velocidade").textContent =
+      "Velocidade: " + Math.hypot(player.vx, player.vy).toFixed(2);
+    document.getElementById("coordX").textContent =
+      "X: " + player.x.toFixed(1);
+    document.getElementById("coordY").textContent =
+      "Y: " + player.y.toFixed(1);
+
+    const turboEl = document.getElementById("turbo");
+    if (turboEnabled) {
+      turboEl.textContent = "TURBO";
+      turboEl.style.color = "deepskyblue";
+    } else {
+      turboEl.textContent = "";
+    }
+  }
+
+  function drawMinimap() {
+    const radius = 100;
+    const scale = radius / 10000;
+    const centerX = canvas.width - radius - 20;
+    const centerY = radius + 20;
+
+    const dx = player.x - sun.x;
+    const dy = player.y - sun.y;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+
+    ctx.fillStyle = "yellow";
+    ctx.beginPath();
+    ctx.arc(
+      centerX - dx * scale,
+      centerY - dy * scale,
+      Math.max(sun.radius * scale, 3),
+      0, Math.PI * 2
+    );
+    ctx.fill();
+
+    for (let planet of planets) {
+      const px = sun.x + planet.distance * Math.cos(planet.angle);
+      const py = sun.y + planet.distance * Math.sin(planet.angle);
+
+      ctx.fillStyle = planet.color;
+      ctx.beginPath();
+      ctx.arc(
+        centerX + (px - player.x) * scale,
+        centerY + (py - player.y) * scale,
+        Math.max(planet.radius * scale, 2),
+        0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+
+    ctx.fillStyle = "lime";
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function loop() {
+    if (!paused) {
+      update();
+      draw();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  loop();
+</script>
+
 </body>
+</html>
