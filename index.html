@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>SpaceGame Mobile 1.0</title>
+  <title>SpaceGame Mobile Only</title>
   <style>
     html, body {
-      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
       background: black;
       -webkit-touch-callout: none;
       -webkit-user-select: none;
@@ -15,12 +18,15 @@
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
     }
+
     canvas {
       display: block;
       width: 100vw;
       height: 100vh;
       background: black;
     }
+
+    /* HUD */
     #hud {
       position: absolute;
       top: 10px;
@@ -32,218 +38,482 @@
       padding: 8px;
       border: 1px solid lime;
       border-radius: 6px;
-      z-index: 100;
-      max-width: 200px;
+      z-index: 200;
+      max-width: 240px;
     }
 
-    /* -------- JOYSTICK -------- */
-    #joystick-area {
+    /* Right-side mobile buttons */
+    #touch-controls {
       position: fixed;
-      bottom: 20px;
-      left: 20px;
-      width: 150px;
-      height: 150px;
-      background: rgba(255,255,255,0.05);
-      border-radius: 50%;
+      bottom: 12px;
+      right: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      width: 160px;
+      gap: 10px;
+      z-index: 210;
+      justify-content: center;
+    }
+    .btn-touch {
+      background-color: rgba(34,34,34,0.95);
+      color: lime;
+      border: 1px solid rgba(0,255,0,0.12);
+      border-radius: 12px;
+      font-weight: bold;
+      font-size: 14px;
+      width: 72px;
+      height: 52px;
+      text-align: center;
+      line-height: 52px;
+      user-select: none;
+      cursor: pointer;
       touch-action: none;
     }
-    #joystick {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 60px;
-      height: 60px;
-      background: rgba(0,255,0,0.7);
+    .btn-touch:active { transform: translateY(1px); }
+
+    /* Joystick left */
+    #joystick-area {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      width: 160px;
+      height: 160px;
+      background: rgba(255,255,255,0.03);
       border-radius: 50%;
-      transform: translate(-50%, -50%);
+      border: 2px solid rgba(255,255,255,0.05);
       touch-action: none;
+      z-index: 210;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #joystick-stick {
+      width: 68px;
+      height: 68px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 50%;
+      touch-action: none;
+      transition: transform 0.06s linear;
+      will-change: transform;
+    }
+
+    /* Minimap indicator */
+    #minimap-indicator {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: white;
+      font-size: 12px;
+      background: rgba(0,0,0,0.5);
+      padding: 6px;
+      border-radius: 6px;
+      z-index: 200;
+      display: none;
     }
   </style>
 </head>
-
 <body>
-  <canvas id="game"></canvas>
+  <canvas id="canvas"></canvas>
 
-  <div id="hud"></div>
-
-  <!-- JOYSTICK -->
-  <div id="joystick-area">
-    <div id="joystick"></div>
+  <div id="hud">
+    <div id="velocidade">Velocidade: 0</div>
+    <div id="coordX">X: 0</div>
+    <div id="coordY">Y: 0</div>
+    <div id="turbo"></div>
   </div>
 
-  <script>
-    // =======================
-    //   CONFIGURAÇÕES BASE
-    // =======================
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
+  <!-- Joystick (left) -->
+  <div id="joystick-area" aria-hidden="true">
+    <div id="joystick-stick"></div>
+  </div>
 
-    function resize() {
+  <!-- Right-side buttons (mobile) -->
+  <div id="touch-controls">
+    <div id="btnTurbo" class="btn-touch">TURBO</div>
+    <div id="btnMinimap" class="btn-touch">MAP</div>
+    <div id="btnPause" class="btn-touch">PAUSA</div>
+    <div id="btnReset" class="btn-touch">RESET</div>
+  </div>
+
+  <div id="minimap-indicator">Minimap ON</div>
+
+  <script>
+    // Mobile-only version: no keyboard/mouse handlers.
+    // Canvas
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    function resizeCanvas(){
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
-    resize();
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
 
-    // =======================
-    //    VARIÁVEIS DO JOGO
-    // =======================
-    const hud = document.getElementById("hud");
+    // Game state (kept close to original)
+    const worldRadius = 100000;
+    const player = { x: 0, y: 0, vx: 0, vy: 0, angle: 11 };
+    let maxSpeed = 50;
 
-    const ship = {
-      x: 0,
-      y: 0,
-      angle: 0,
-      vx: 0,
-      vy: 0,
-      thrust: 0.1,
-      rotSpeed: 0.05
-    };
+    // Buttons state
+    let turboEnabled = false;
+    let minimapEnabled = false;
+    let paused = false;
 
-    const sun = { x: 0, y: 0, mass: 20000 };
+    const btnTurbo = document.getElementById("btnTurbo");
+    const btnMinimap = document.getElementById("btnMinimap");
+    const btnPause = document.getElementById("btnPause");
+    const btnReset = document.getElementById("btnReset");
+    const minimapIndicator = document.getElementById("minimap-indicator");
 
-    const planets = [];
-    function createPlanets() {
-      planets.length = 0;
-      for (let i = 0; i < 5; i++) {
-        planets.push({
-          angle: Math.random() * Math.PI * 2,
-          dist: 200 + i * 150,
-          size: 25 + Math.random() * 20,
-          speed: 0.002 + Math.random() * 0.004
-        });
-      }
+    function updateButtonLabels(){
+      btnTurbo.textContent = turboEnabled ? "TURBO ON" : "TURBO";
+      btnMinimap.textContent = minimapEnabled ? "MAP ON" : "MAP";
+      btnPause.textContent = paused ? "CONT." : "PAUSA";
+      minimapIndicator.style.display = minimapEnabled ? "block" : "none";
     }
-    createPlanets();
 
-    // =======================
-    //    JOYSTICK VIRTUAL
-    // =======================
+    btnTurbo.addEventListener("touchstart", e => { e.preventDefault(); turboEnabled = !turboEnabled; updateButtonLabels(); }, {passive:false});
+    btnMinimap.addEventListener("touchstart", e => { e.preventDefault(); minimapEnabled = !minimapEnabled; updateButtonLabels(); }, {passive:false});
+    btnPause.addEventListener("touchstart", e => { e.preventDefault(); paused = !paused; updateButtonLabels(); }, {passive:false});
+    btnReset.addEventListener("touchstart", e => { e.preventDefault(); player.x = 0; player.y = 0; player.vx = 0; player.vy = 0; player.angle = 11; }, {passive:false});
+
+    updateButtonLabels();
+
+    // Stars - reduced sample for mobile perf
+    const stars = [];
+    const starDensity = 1.25e-5;
+    const totalStars = Math.max(120, Math.floor((worldRadius * 2) ** 2 * starDensity / 2500));
+    for (let i = 0; i < totalStars; i++){
+      stars.push({
+        x: (Math.random() - 0.5) * worldRadius * 2,
+        y: (Math.random() - 0.5) * worldRadius * 2,
+        size: Math.random() * 3 + 1
+      });
+    }
+
+    // Sun & planets
+    const sun = { x: 50000, y: 50000, mass: 2000, radius: 1500 };
+    const planets = [
+      { name: "Mercúrio", distance: 6000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 200, color: "gray", mass: 30 },
+      { name: "Vênus", distance: 10000, speed: 0.0002, angle: Math.random()*Math.PI*2, radius: 350, color: "gold", mass: 40 },
+      { name: "Terra", distance: 14000, speed: 0.00015, angle: Math.random()*Math.PI*2, radius: 400, color: "blue", mass: 40 },
+      { name: "Marte", distance: 18000, speed: 0.00012, angle: Math.random()*Math.PI*2, radius: 300, color: "red", mass: 26 }
+    ];
+
+    // Joystick implementation (mobile-only)
     const joyArea = document.getElementById("joystick-area");
-    const joy = document.getElementById("joystick");
+    const joyStick = document.getElementById("joystick-stick");
+    const joyRect = { cx: 0, cy: 0, r: 60 }; // will compute center dynamically
     let joyActive = false;
-    let joyX = 0;
-    let joyY = 0;
+    let joystick = { dx: 0, dy: 0 }; // normalized -1..1
 
-    joyArea.addEventListener("touchstart", e => {
+    function updateJoyCenter(){
+      const r = joyArea.getBoundingClientRect();
+      joyRect.cx = r.left + r.width/2;
+      joyRect.cy = r.top + r.height/2;
+    }
+    updateJoyCenter();
+    window.addEventListener("resize", updateJoyCenter);
+
+    function joyStart(e){
       joyActive = true;
-    });
-
-    joyArea.addEventListener("touchend", e => {
+      handleJoyMove(e);
+    }
+    function joyEnd(e){
       joyActive = false;
-      joyX = 0; joyY = 0;
-      joy.style.left = "50%";
-      joy.style.top = "50%";
-    });
-
-    joyArea.addEventListener("touchmove", e => {
-      const rect = joyArea.getBoundingClientRect();
-      const touch = e.touches[0];
-
-      let x = touch.clientX - (rect.left + rect.width/2);
-      let y = touch.clientY - (rect.top + rect.height/2);
-
+      joystick.dx = 0; joystick.dy = 0;
+      joyStick.style.transform = `translate(0px,0px)`;
+    }
+    function handleJoyMove(e){
+      if(!joyActive && !(e.type === "touchstart")) return;
+      const touch = e.touches ? e.touches[0] : e;
+      let x = touch.clientX - joyRect.cx;
+      let y = touch.clientY - joyRect.cy;
       const dist = Math.sqrt(x*x + y*y);
-      const maxDist = 60;
-
-      if (dist > maxDist) {
-        x = (x / dist) * maxDist;
-        y = (y / dist) * maxDist;
+      const max = joyRect.r;
+      if (dist > max){
+        x = (x / dist) * max;
+        y = (y / dist) * max;
       }
+      joystick.dx = x / max; // -1..1
+      joystick.dy = y / max; // -1..1 (down positive)
 
-      joyX = x / maxDist;
-      joyY = y / maxDist;
+      // Move visual stick
+      joyStick.style.transform = `translate(${x}px, ${y}px)`;
+      e.preventDefault && e.preventDefault();
+    }
 
-      joy.style.left = (50 + joyX * 40) + "%";
-      joy.style.top = (50 + joyY * 40) + "%";
+    joyArea.addEventListener("touchstart", e => { joyStart(e); }, {passive:false});
+    joyArea.addEventListener("touchmove", e => { handleJoyMove(e); }, {passive:false});
+    joyArea.addEventListener("touchend", e => { joyEnd(e); }, {passive:false});
+    joyArea.addEventListener("touchcancel", e => { joyEnd(e); }, {passive:false});
 
-      e.preventDefault();
-    });
+    // Game update/draw (kept original mechanics, but input exclusively from joystick/buttons)
+    function update(){
+      if (paused) return;
 
-    // =======================
-    //      LOOP PRINCIPAL
-    // =======================
-    function update() {
-      // Joystick → Rotação e aceleração
-      if (joyActive) {
-        ship.angle += joyX * ship.rotSpeed;
+      const friction = 0.999;
+      const acceleration = joystickActive() || turboEnabled ? (turboEnabled ? 2 : 0.5) : 0;
+      maxSpeed = turboEnabled ? 200 : 50;
 
-        // empurra para frente se empurrar para cima no joystick
-        if (-joyY > 0.2) {
-          ship.vx += Math.cos(ship.angle) * ship.thrust * (-joyY);
-          ship.vy += Math.sin(ship.angle) * ship.thrust * (-joyY);
+      // Joystick controls movement:
+      if (joystick.dx !== 0 || joystick.dy !== 0){
+        // Use joystick direction as heading — invert dy (touch down is positive)
+        const dirX = joystick.dx;
+        const dirY = -joystick.dy;
+
+        // If magnitude is small, don't thrust — require some deadzone
+        const mag = Math.hypot(dirX, dirY);
+        if (mag > 0.05){
+          // compute angle to face (optional: keep previous angle smoothing)
+          const targetAngle = Math.atan2(dirY, dirX);
+          // small smoothing: rotate toward target instead of snap (keeps behavior similar to original)
+          const angDiff = normalizeAngle(targetAngle - player.angle);
+          player.angle += angDiff * 0.25; // smoothing factor
+
+          // thrust proportional to how far the stick is pushed and whether turbo is on
+          const thrustFactor = mag;
+          const accel = (turboEnabled ? 2 : 0.5) * thrustFactor;
+          player.vx += Math.cos(player.angle) * accel;
+          player.vy += Math.sin(player.angle) * accel;
         }
       }
 
-      // Gravidade do sol
-      const dxs = sun.x - ship.x;
-      const dys = sun.y - ship.y;
-      const distShipSun = Math.sqrt(dxs*dxs + dys*dys);
-      const force = sun.mass / (distShipSun * distShipSun);
+      // Slight brake if no thrust and 'brake' button not present — keep existing behavior simple
+      // (original had 'b' key; mobile version doesn't expose it unless you add a button)
 
-      ship.vx += (dxs / distShipSun) * force * 0.02;
-      ship.vy += (dys / distShipSun) * force * 0.02;
+      // Limit speed
+      let speed = Math.hypot(player.vx, player.vy);
+      if (speed > maxSpeed){
+        const scale = maxSpeed / speed;
+        player.vx *= scale;
+        player.vy *= scale;
+      }
 
-      // Atualiza posição da nave
-      ship.x += ship.vx;
-      ship.y += ship.vy;
+      // Gravity: sun + planets (lightweight)
+      const G = 500;
+      const applyGravity = (m, x, y) => {
+        const dx = x - player.x;
+        const dy = y - player.y;
+        const distSq = dx*dx + dy*dy;
+        const dist = Math.sqrt(distSq);
+        if (dist > 20){
+          const force = (G * m) / distSq;
+          player.vx += (dx / dist) * force;
+          player.vy += (dy / dist) * force;
+        }
+      };
 
-      // Planetas orbitando
-      planets.forEach(p => {
-        p.angle += p.speed;
-      });
+      applyGravity(sun.mass, sun.x, sun.y);
+      for (let p of planets){
+        const px = sun.x + p.distance * Math.cos(p.angle || p.angle0 || 0);
+        const py = sun.y + p.distance * Math.sin(p.angle || p.angle0 || 0);
+        applyGravity(p.mass || 1, px, py);
+      }
+
+      // Update position + friction
+      player.vx *= friction;
+      player.vy *= friction;
+      player.x += player.vx;
+      player.y += player.vy;
+
+      // Collide with sun
+      const distSun = Math.hypot(player.x - sun.x, player.y - sun.y);
+      if (distSun < sun.radius){
+        const angleOut = Math.atan2(player.y - sun.y, player.x - sun.x);
+        player.x = sun.x + Math.cos(angleOut) * (sun.radius + 1);
+        player.y = sun.y + Math.sin(angleOut) * (sun.radius + 1);
+        player.vx = 0; player.vy = 0;
+      }
+
+      // Planet collisions & grip
+      for (let p of planets){
+        const px = sun.x + p.distance * Math.cos(p.angle);
+        const py = sun.y + p.distance * Math.sin(p.angle);
+        const d = Math.hypot(player.x - px, player.y - py);
+        if (d < p.radius){
+          const angleOut = Math.atan2(player.y - py, player.x - px);
+          player.x = px + Math.cos(angleOut) * p.radius;
+          player.y = py + Math.sin(angleOut) * p.radius;
+          const orbitalVx = -Math.sin(p.angle) * p.speed * p.distance;
+          const orbitalVy = Math.cos(p.angle) * p.speed * p.distance;
+          player.vx += (orbitalVx - player.vx) * 0.1;
+          player.vy += (orbitalVy - player.vy) * 0.1;
+          player.vx *= 0.98; player.vy *= 0.98;
+        }
+      }
+
+      // World borders wrap/reflect behavior
+      if (player.x < -worldRadius){ player.x = -worldRadius + 1000; player.vx *= -1; }
+      if (player.x > worldRadius){ player.x = worldRadius - 1000; player.vx *= -1; }
+      if (player.y < -worldRadius){ player.y = -worldRadius + 1000; player.vy *= -1; }
+      if (player.y > worldRadius){ player.y = worldRadius - 1000; player.vy *= -1; }
+
+      // Advance planetary angles
+      for (let p of planets) p.angle += p.speed;
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Helpers
+    function normalizeAngle(a){
+      while (a > Math.PI) a -= Math.PI*2;
+      while (a < -Math.PI) a += Math.PI*2;
+      return a;
+    }
+    function joystickActive(){
+      return Math.abs(joystick.dx) > 0.02 || Math.abs(joystick.dy) > 0.02;
+    }
 
-      const camX = ship.x - canvas.width / 2;
-      const camY = ship.y - canvas.height / 2;
+    // Draw
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
 
-      // Sol
-      ctx.fillStyle = "yellow";
+      const offsetX = canvas.width/2 - player.x;
+      const offsetY = canvas.height/2 - player.y;
+
+      // Grid (draw limited around player for perf)
+      const gridSpacing = 500;
+      ctx.strokeStyle = "#222";
+      ctx.lineWidth = 0.5;
+      const range = 3000;
+      const startX = Math.floor((player.x - range) / gridSpacing) * gridSpacing;
+      const endX = Math.floor((player.x + range) / gridSpacing) * gridSpacing;
+      const startY = Math.floor((player.y - range) / gridSpacing) * gridSpacing;
+      const endY = Math.floor((player.y + range) / gridSpacing) * gridSpacing;
+
+      for (let x = startX; x <= endX; x += gridSpacing){
+        ctx.beginPath();
+        ctx.moveTo(x + offsetX, 0);
+        ctx.lineTo(x + offsetX, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = startY; y <= endY; y += gridSpacing){
+        ctx.beginPath();
+        ctx.moveTo(0, y + offsetY);
+        ctx.lineTo(canvas.width, y + offsetY);
+        ctx.stroke();
+      }
+
+      // Stars
+      ctx.fillStyle = "white";
+      for (let s of stars){
+        const sx = s.x + offsetX;
+        const sy = s.y + offsetY;
+        if (sx >= -10 && sx <= canvas.width + 10 && sy >= -10 && sy <= canvas.height + 10){
+          ctx.beginPath();
+          ctx.arc(sx, sy, s.size, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      // Sun
       ctx.beginPath();
-      ctx.arc(sun.x - camX, sun.y - camY, 40, 0, Math.PI*2);
+      ctx.arc(sun.x + offsetX, sun.y + offsetY, sun.radius, 0, Math.PI*2);
+      ctx.fillStyle = "yellow";
       ctx.fill();
 
-      // Planetas
-      planets.forEach(p => {
-        const px = sun.x + Math.cos(p.angle) * p.dist;
-        const py = sun.y + Math.sin(p.angle) * p.dist;
-
-        ctx.fillStyle = "#3498db";
+      // Planets
+      for (let p of planets){
+        const x = sun.x + p.distance * Math.cos(p.angle);
+        const y = sun.y + p.distance * Math.sin(p.angle);
         ctx.beginPath();
-        ctx.arc(px - camX, py - camY, p.size, 0, Math.PI*2);
+        ctx.arc(x + offsetX, y + offsetY, p.radius, 0, Math.PI*2);
+        ctx.fillStyle = p.color;
         ctx.fill();
-      });
+      }
 
-      // Nave
+      // Ship (center)
       ctx.save();
       ctx.translate(canvas.width/2, canvas.height/2);
-      ctx.rotate(ship.angle);
-      ctx.fillStyle = "white";
+      ctx.rotate(player.angle);
+      ctx.fillStyle = "lime";
       ctx.beginPath();
-      ctx.moveTo(20, 0);
-      ctx.lineTo(-15, 10);
-      ctx.lineTo(-15, -10);
+      ctx.moveTo(15,0);
+      ctx.lineTo(-10,-7);
+      ctx.lineTo(-10,7);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
 
-      // HUD
-      hud.innerHTML = `
-        X: ${ship.x.toFixed(1)}<br>
-        Y: ${ship.y.toFixed(1)}<br>
-        Vel: ${Math.sqrt(ship.vx**2 + ship.vy**2).toFixed(2)}
-      `;
+      // Border effect
+      const maxEffectDistance = 1000;
+      const distToLeft = player.x + worldRadius;
+      const distToRight = worldRadius - player.x;
+      const distToTop = player.y + worldRadius;
+      const distToBottom = worldRadius - player.y;
+      const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+      if (minDist < maxEffectDistance){
+        const opacity = 1 - minDist / maxEffectDistance;
+        ctx.fillStyle = `rgba(128,0,128,${Math.max(0,Math.min(1,opacity))})`;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
+
+      // HUD values
+      document.getElementById("velocidade").textContent = `Velocidade: ${Math.hypot(player.vx,player.vy).toFixed(2)}`;
+      document.getElementById("coordX").textContent = `X: ${player.x.toFixed(1)}`;
+      document.getElementById("coordY").textContent = `Y: ${player.y.toFixed(1)}`;
+      const turboEl = document.getElementById("turbo");
+      turboEl.textContent = turboEnabled ? "TURBO" : "";
+
+      // Minimap if enabled
+      if (minimapEnabled) drawMinimap();
     }
 
-    function loop() {
-      update();
+    function drawMinimap(){
+      const radius = 100;
+      const scale = radius / 10000;
+      const centerX = canvas.width - radius - 18;
+      const centerY = radius + 18;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI*2);
+      ctx.clip();
+
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(centerX - radius, centerY - radius, radius*2, radius*2);
+
+      // sun
+      ctx.fillStyle = "yellow";
+      ctx.beginPath();
+      ctx.arc(centerX - (player.x - sun.x)*scale, centerY - (player.y - sun.y)*scale, Math.max(sun.radius * scale, 3), 0, Math.PI*2);
+      ctx.fill();
+
+      // planets
+      for (let p of planets){
+        const px = sun.x + p.distance * Math.cos(p.angle);
+        const py = sun.y + p.distance * Math.sin(p.angle);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(centerX + (px - player.x)*scale, centerY + (py - player.y)*scale, Math.max(p.radius*scale,2), 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // player center
+      ctx.fillStyle = "lime";
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 3, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.restore();
+      ctx.strokeStyle = "white"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // Main loop
+    function loop(){
+      if (!paused) update();
       draw();
       requestAnimationFrame(loop);
     }
     loop();
+
+    // Prevent double-tap zoom
+    let lastTouch = 0;
+    document.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTouch <= 300) e.preventDefault();
+      lastTouch = now;
+    }, {passive:false});
   </script>
 </body>
 </html>
