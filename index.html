@@ -260,8 +260,8 @@
     // If joystick pushed, use it to direct & accelerate:
     if (joystick.mag > 0.03) { // small deadzone
       // joystick.dy positive = finger down -> canvas y increases downward; invert for forward up
-      const dx = joystick.dx;
-      const dy = joystick.dy;
+      const dy = joystick.dx;
+      const dx = joystick.dy;
       // target angle: invert dy for mathematical coordinates such that up means negative y
       const targetAngle = Math.atan2(-dy, dx);
       // Smooth rotation toward target (small smoothing to avoid snap)
