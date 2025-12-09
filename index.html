@@ -43,7 +43,7 @@
   // Game state
   const worldRadius = 150000;
   const player = { x:0,y:0,vx:0,vy:0,angle:11 };
-  let maxSpeed = 50;
+  let maxSpeed = 101;
   let turboEnabled=false,minimapEnabled=false,paused=false;
 
   // Buttons
@@ -190,7 +190,7 @@ const systems = [
     if(paused) return;
     const friction=0.999;
     const acceleration=turboEnabled?2:0.5;
-    maxSpeed = turboEnabled?200:50;
+    maxSpeed = turboEnabled?405:101;
 
     if(joystick.mag>0.03){
       const targetAngle=Math.atan2(joystick.dy,joystick.dx);
@@ -277,7 +277,7 @@ const systems = [
     const endX=Math.floor((player.x+range)/gridSpacing)*gridSpacing;
     const startY=Math.floor((player.y-range)/gridSpacing)*gridSpacing;
     const endY=Math.floor((player.y+range)/gridSpacing)*gridSpacing;
-    ctx.strokeStyle="#222"; ctx.lineWidth=0.5;
+    ctx.strokeStyle="#222"; ctx.lineWidth=1.5;
     for(let x=startX;x<=endX;x+=gridSpacing){ctx.beginPath();ctx.moveTo(x+offsetX,0);ctx.lineTo(x+offsetX,canvas.height);ctx.stroke();}
     for(let y=startY;y<=endY;y+=gridSpacing){ctx.beginPath();ctx.moveTo(0,y+offsetY);ctx.lineTo(canvas.width,y+offsetY);ctx.stroke();}
 
