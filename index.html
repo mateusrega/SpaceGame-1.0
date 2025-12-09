@@ -67,44 +67,83 @@
   const stars=[];
   const starDensity=1.25e-5;
   const totalStars=Math.floor((worldRadius*2)**2*starDensity);
-  for(let i=0;i<totalStars;i++){
-    stars.push({x:(Math.random()-0.5)*worldRadius*2, y:(Math.random()-0.5)*worldRadius*2, size:Math.random()*5+1});
-  }
+for (let i = 0; i < totalStars; i++) {
+  stars.push({
+    x: (Math.random() - 0.5) * worldRadius * 2,
+    y: (Math.random() - 0.5) * worldRadius * 2,
+    size: Math.random() * 5 + 1
+  });
+}// ============================
+// Sistemas estelares centralizados
+// ============================
+const systems = [
+  // Sistema Central (perto do spawn)
+  {
+    name: "Sistema Central",
+    sun: { x: 0, y: 0, mass: 2000, radius: 1500, color: "yellow" },
+    planets: [
+      { name: "Mercúrio", distance: 6000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 200, color: "#E63946", mass: 30 },
+      { name: "Vênus",    distance: 10000, speed: 0.0002, angle: Math.random()*Math.PI*2, radius: 350, color: "#1D3557", mass: 40 },
+      { name: "Terra",    distance: 14000, speed: 0.00015, angle: Math.random()*Math.PI*2, radius: 400, color: "#6AFF00", mass: 40 },
+      { name: "Marte",    distance: 18000, speed: 0.00012, angle: Math.random()*Math.PI*2, radius: 300, color: "#FF7F11", mass: 26 }
+    ]
+  },
 
-  // Systems
-  const systems=[
-    {name:"Sistema Central", sun:{x:50000,y:50000,mass:2000,radius:1500,color:"yellow"}, planets:[
-      {name:"Mercúrio", distance:6000, speed:0.0003, angle:Math.random()*Math.PI*2, radius:200,color:"gray", mass:30},
-      {name:"Vênus", distance:10000, speed:0.0002, angle:Math.random()*Math.PI*2, radius:350,color:"gold", mass:40},
-      {name:"Terra", distance:14000, speed:0.00015, angle:Math.random()*Math.PI*2, radius:400,color:"blue", mass:40},
-      {name:"Marte", distance:18000, speed:0.00012, angle:Math.random()*Math.PI*2, radius:300,color:"red", mass:26}
-    ]},
-    {name:"Sistema Boreal", sun:{x:20000,y:80000,mass:900,radius:700,color:"#8FDBFF"}, planets:[
-      {name:"Aurion", distance:8000, speed:0.00022, angle:Math.random()*Math.PI*2, radius:300,color:"#00C8FF", mass:25},
-      {name:"Gelmare", distance:13000, speed:0.00018, angle:Math.random()*Math.PI*2, radius:420,color:"#7FF6FF", mass:32},
-      {name:"Kryst", distance:20000, speed:0.00010, angle:Math.random()*Math.PI*2, radius:600,color:"#AFFFFF", mass:55}
-    ]},
-    {name:"Sistema Rubrum", sun:{x:85000,y:25000,mass:600,radius:500,color:"#FF5C5C"}, planets:[
-      {name:"Scorn", distance:5000, speed:0.0003, angle:Math.random()*Math.PI*2, radius:180,color:"#FF0000", mass:20},
-      {name:"Balor", distance:9000, speed:0.00022, angle:Math.random()*Math.PI*2, radius:300,color:"#FF7A00", mass:28},
-      {name:"Vulcar", distance:15000, speed:0.00016, angle:Math.random()*Math.PI*2, radius:450,color:"#FFA200", mass:40}
-    ]},
-    {name:"Sistema Elyrium", sun:{x:120000,y:100000,mass:1200,radius:950,color:"#D7F1FF"}, planets:[
-      {name:"Shyra", distance:9000, speed:0.00024, angle:Math.random()*Math.PI*2, radius:260,color:"#FFF7C0", mass:24},
-      {name:"Talyon", distance:17000, speed:0.00018, angle:Math.random()*Math.PI*2, radius:480,color:"#B8FF8E", mass:45},
-      {name:"Friela", distance:26000, speed:0.00011, angle:Math.random()*Math.PI*2, radius:700,color:"#A0C5FF", mass:70}
-    ]},
-    {name:"Sistema Arkan", sun:{x:40000,y:150000,mass:800,radius:600,color:"#FFB469"}, planets:[
-      {name:"Rakef", distance:7000, speed:0.00027, angle:Math.random()*Math.PI*2, radius:220,color:"#FF9248", mass:28},
-      {name:"Domare", distance:13000, speed:0.00019, angle:Math.random()*Math.PI*2, radius:360,color:"#FFE560", mass:40},
-      {name:"Garon", distance:21000, speed:0.00013, angle:Math.random()*Math.PI*2, radius:520,color:"#FFD299", mass:55}
-    ]},
-    {name:"Sistema Colosso", sun:{x:150000,y:50000,mass:4000,radius:3000,color:"#FF6B6B"}, planets:[
-      {name:"Torun", distance:16000, speed:0.00014, angle:Math.random()*Math.PI*2, radius:600,color:"#FFD000", mass:85},
-      {name:"Cryon", distance:30000, speed:0.00010, angle:Math.random()*Math.PI*2, radius:800,color:"#00FFE5", mass:110},
-      {name:"Velkar", distance:45000, speed:0.00007, angle:Math.random()*Math.PI*2, radius:950,color:"#7F00FF", mass:150}
-    ]}
-  ];
+  // Sistema Boreal
+  {
+    name: "Sistema Boreal",
+    sun: { x: -70000, y: 80000, mass: 900, radius: 700, color: "#8FDBFF" },
+    planets: [
+      { name: "Aurion",  distance: 8000,  speed: 0.00022, angle: Math.random()*Math.PI*2, radius: 300, color: "#00F2FF", mass: 25 },
+      { name: "Gelmare", distance: 13000, speed: 0.00018, angle: Math.random()*Math.PI*2, radius: 420, color: "#7FF6FF", mass: 32 },
+      { name: "Kryst",   distance: 20000, speed: 0.00010, angle: Math.random()*Math.PI*2, radius: 600, color: "#AFFFFF", mass: 55 }
+    ]
+  },
+
+  // Sistema Rubrum
+  {
+    name: "Sistema Rubrum",
+    sun: { x: 80000, y: -70000, mass: 600, radius: 500, color: "#FF5C5C" },
+    planets: [
+      { name: "Scorn", distance: 5000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 180, color: "#FF0000", mass: 20 },
+      { name: "Balor", distance: 9000, speed: 0.00022, angle: Math.random()*Math.PI*2, radius: 300, color: "#FF7A00", mass: 28 },
+      { name: "Vulcar",distance: 15000, speed: 0.00016, angle: Math.random()*Math.PI*2, radius: 450, color: "#FFA200", mass: 40 }
+    ]
+  },
+
+  // Sistema Elyrium
+  {
+    name: "Sistema Elyrium",
+    sun: { x: 60000, y: 90000, mass: 1200, radius: 950, color: "#D7F1FF" },
+    planets: [
+      { name: "Shyra",   distance: 9000,  speed: 0.00024, angle: Math.random()*Math.PI*2, radius: 260, color: "#FFF7C0", mass: 24 },
+      { name: "Talyon",  distance: 17000, speed: 0.00018, angle: Math.random()*Math.PI*2, radius: 480, color: "#B8FF8E", mass: 45 },
+      { name: "Friela",  distance: 26000, speed: 0.00011, angle: Math.random()*Math.PI*2, radius: 700, color: "#A0C5FF", mass: 70 }
+    ]
+  },
+
+  // Sistema Arkan
+  {
+    name: "Sistema Arkan",
+    sun: { x: -50000, y: -90000, mass: 800, radius: 600, color: "#FFB469" },
+    planets: [
+      { name: "Rakef",  distance: 7000,  speed: 0.00027, angle: Math.random()*Math.PI*2, radius: 220, color: "#FF9248", mass: 28 },
+      { name: "Domare", distance: 13000, speed: 0.00019, angle: Math.random()*Math.PI*2, radius: 360, color: "#FFE560", mass: 40 },
+      { name: "Garon",  distance: 21000, speed: 0.00013, angle: Math.random()*Math.PI*2, radius: 520, color: "#FFD299", mass: 55 }
+    ]
+  },
+
+  // Sistema Colosso
+  {
+    name: "Sistema Colosso",
+    sun: { x: 90000, y: 60000, mass: 4000, radius: 3000, color: "#FF6B6B" },
+    planets: [
+      { name: "Torun",   distance: 16000, speed: 0.00014, angle: Math.random()*Math.PI*2, radius: 600, color: "#FFD000", mass: 85 },
+      { name: "Cryon",   distance: 30000, speed: 0.00010, angle: Math.random()*Math.PI*2, radius: 800, color: "#00FFE5", mass: 110 },
+      { name: "Velkar",  distance: 45000, speed: 0.00007, angle: Math.random()*Math.PI*2, radius: 950, color: "#7F00FF", mass: 150 }
+    ]
+  }
+];
 
   // Joystick
   const joyArea=document.getElementById("joystick-area");
