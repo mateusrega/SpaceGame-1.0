@@ -41,7 +41,7 @@
   window.addEventListener("resize",resizeCanvas); resizeCanvas();
 
   // Game state
-  const worldRadius = 100000;
+  const worldRadius = 150000;
   const player = { x:0,y:0,vx:0,vy:0,angle:11 };
   let maxSpeed = 50;
   let turboEnabled=false,minimapEnabled=false,paused=false;
@@ -80,7 +80,7 @@ const systems = [
   // Sistema Central (perto do spawn)
   {
     name: "Sistema Central",
-    sun: { x: -53000, y: -500, mass: 2000, radius: 1500, color: "yellow" },
+    sun: { x: -65000, y: -500, mass: 2000, radius: 1500, color: "yellow" },
     planets: [
       { name: "Mercúrio", distance: 6000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 200, color: "#E63946", mass: 30 },
       { name: "Vênus",    distance: 10000, speed: 0.0002, angle: Math.random()*Math.PI*2, radius: 350, color: "#1D3557", mass: 40 },
@@ -103,7 +103,7 @@ const systems = [
   // Sistema Rubrum
   {
     name: "Sistema Rubrum",
-    sun: { x: 80000, y: -70000, mass: 600, radius: 500, color: "#FF5C5C" },
+    sun: { x: 60000, y: -70000, mass: 600, radius: 500, color: "#FF5C5C" },
     planets: [
       { name: "Scorn", distance: 5000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 180, color: "#FF0000", mass: 20 },
       { name: "Balor", distance: 9000, speed: 0.00022, angle: Math.random()*Math.PI*2, radius: 300, color: "#FF7A00", mass: 28 },
@@ -114,7 +114,7 @@ const systems = [
   // Sistema Elyrium
   {
     name: "Sistema Elyrium",
-    sun: { x: 60000, y: 90000, mass: 1200, radius: 950, color: "#D7F1FF" },
+    sun: { x: 55000, y: 90000, mass: 1200, radius: 950, color: "#D7F1FF" },
     planets: [
       { name: "Shyra",   distance: 9000,  speed: 0.00024, angle: Math.random()*Math.PI*2, radius: 260, color: "#FFF7C0", mass: 24 },
       { name: "Talyon",  distance: 17000, speed: 0.00018, angle: Math.random()*Math.PI*2, radius: 480, color: "#B8FF8E", mass: 45 },
@@ -127,7 +127,7 @@ const systems = [
     name: "Sistema Arkan",
     sun: { x: -50000, y: -90000, mass: 800, radius: 600, color: "#FFB469" },
     planets: [
-      { name: "Rakef",  distance: 7000,  speed: 0.00027, angle: Math.random()*Math.PI*2, radius: 220, color: "#FF9248", mass: 28 },
+      { name: "Rakef",  distance: 7000,  speed: 0.00037, angle: Math.random()*Math.PI*2, radius: 220, color: "#FF9248", mass: 28 },
       { name: "Domare", distance: 13000, speed: 0.00019, angle: Math.random()*Math.PI*2, radius: 360, color: "#FFE560", mass: 40 },
       { name: "Garon",  distance: 21000, speed: 0.00013, angle: Math.random()*Math.PI*2, radius: 520, color: "#FFD299", mass: 55 }
     ]
@@ -136,7 +136,7 @@ const systems = [
   // Sistema Colosso
   {
     name: "Sistema Colosso",
-    sun: { x: 90000, y: 30000, mass: 4000, radius: 3000, color: "#FF6B6B" },
+    sun: { x: 90000, y: 20000, mass: 5000, radius: 3500, color: "#FF6B6B" },
     planets: [
       { name: "Torun",   distance: 16000, speed: 0.00014, angle: Math.random()*Math.PI*2, radius: 600, color: "#FFD000", mass: 85 },
       { name: "Cryon",   distance: 30000, speed: 0.00010, angle: Math.random()*Math.PI*2, radius: 800, color: "#00FFE5", mass: 110 },
@@ -304,7 +304,7 @@ const systems = [
   }
 
   function drawBorderEffect(){
-    const maxEffectDistance=1000;
+    const maxEffectDistance=2000;
     const distToLeft=player.x+worldRadius;
     const distToRight=worldRadius-player.x;
     const distToTop=player.y+worldRadius;
