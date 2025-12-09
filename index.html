@@ -189,8 +189,8 @@ const systems = [
   function update(){
     if(paused) return;
     const friction=0.999;
-    const acceleration=turboEnabled?2:0.5;
-    maxSpeed = turboEnabled?405:101;
+    const acceleration=turboEnabled?25:0.5;
+    maxSpeed = turboEnabled?504:101;
 
     if(joystick.mag>0.03){
       const targetAngle=Math.atan2(joystick.dy,joystick.dx);
