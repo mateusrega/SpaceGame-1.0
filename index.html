@@ -43,7 +43,7 @@
   // Game state
   const worldRadius = 150000;
   const player = { x:0,y:0,vx:0,vy:0,angle:11 };
-  let maxSpeed = 101;
+  let maxSpeed = 100.1;
   let turboEnabled=false,minimapEnabled=false,paused=false;
 
   // Buttons
@@ -190,7 +190,8 @@ const systems = [
     if(paused) return;
     const friction=0.999;
     const acceleration=turboEnabled?25:0.5;
-    maxSpeed = turboEnabled?504:101;
+    maxSpeed = turboEnabled?500.5:100.1;
+    friction=0
 
     if(joystick.mag>0.03){
       const targetAngle=Math.atan2(joystick.dy,joystick.dx);
@@ -206,7 +207,7 @@ const systems = [
     if(speed>maxSpeed){const scale=maxSpeed/speed; player.vx*=scale;player.vy*=scale;}
 
     // Gravity
-    const G=500;
+    const G=5000;
     const applyGravity=(m,x,y)=>{
       const dx=x-player.x, dy=y-player.y;
       const distSq=dx*dx+dy*dy; const dist=Math.sqrt(distSq);
