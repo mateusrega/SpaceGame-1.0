@@ -7,11 +7,11 @@
 <style>
   html,body{margin:0;padding:0;height:100%;background:#071020;overflow:hidden;font-family:sans-serif;color:#dfeffb;}
   canvas{display:block;}
-  #joystick-area{position:absolute;bottom:20px;left:20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.1);}
-  #joystick-stick{position:absolute;width:40px;height:40px;border-radius:50%;background:lime;top:40px;left:40px;pointer-events:none;}
-  #ui{position:absolute;top:10px;left:10px;}
+  #joystick-area{position:absolute;bottom:20px;left:20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.08);touch-action:none;}
+  #joystick-stick{position:absolute;width:40px;height:40px;border-radius:50%;background:lime;top:40px;left:40px;pointer-events:none;transform:translate(0,0);}
+  #ui{position:absolute;top:10px;left:10px;z-index:10;}
   .hud-item{margin:2px 0;}
-  .btn{padding:4px 8px;margin-right:4px;background:#0c1420;color:#4fb3ff;border:none;border-radius:4px;}
+  .btn{padding:6px 10px;margin-right:4px;background:#0c1420;color:#4fb3ff;border:none;border-radius:6px;touch-action:manipulation;}
 </style>
 </head>
 <body>
@@ -29,7 +29,7 @@
   <button class="btn" id="btnReset">RESET</button>
 </div>
 
-<div id="joystick-area">
+<div id="joystick-area" aria-hidden="true">
   <div id="joystick-stick"></div>
 </div>
 
@@ -38,347 +38,432 @@
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
   function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
-  window.addEventListener("resize",resizeCanvas); resizeCanvas();
+  window.addEventListener("resize",resizeCanvas);
+  resizeCanvas();
 
   // Game state
   const worldRadius = 150000;
-  const player = { x:0,y:0,vx:0,vy:0,angle:11 };
+  const player = { x:0, y:0, vx:0, vy:0, angle:0 }; // angle inicial mais previsível
   let maxSpeed = 100.1;
-  let turboEnabled=false,minimapEnabled=false,paused=false;
+  let turboEnabled = false, minimapEnabled = false, paused = false;
 
   // Buttons
-  const btnTurbo=document.getElementById("btnTurbo");
-  const btnMinimap=document.getElementById("btnMinimap");
-  const btnPause=document.getElementById("btnPause");
-  const btnReset=document.getElementById("btnReset");
+  const btnTurbo = document.getElementById("btnTurbo");
+  const btnMinimap = document.getElementById("btnMinimap");
+  const btnPause = document.getElementById("btnPause");
+  const btnReset = document.getElementById("btnReset");
 
   function updateButtonLabels(){
-    btnTurbo.textContent = turboEnabled ? "TURBO ON":"TURBO";
-    btnMinimap.textContent = minimapEnabled ? "MAP ON":"MAP";
-    btnPause.textContent = paused ? "CONTINUAR":"PAUSA";
+    btnTurbo.textContent = turboEnabled ? "TURBO ON" : "TURBO";
+    btnMinimap.textContent = minimapEnabled ? "MAP ON" : "MAP";
+    btnPause.textContent = paused ? "CONTINUAR" : "PAUSA";
   }
-  btnTurbo.addEventListener("touchstart",(e)=>{e.preventDefault(); turboEnabled=!turboEnabled; updateButtonLabels();},{passive:false});
-  btnMinimap.addEventListener("touchstart",(e)=>{e.preventDefault(); minimapEnabled=!minimapEnabled; updateButtonLabels();},{passive:false});
-  btnPause.addEventListener("touchstart",(e)=>{e.preventDefault(); paused=!paused; updateButtonLabels();},{passive:false});
-  btnReset.addEventListener("touchstart",(e)=>{e.preventDefault(); player.x=0;player.y=0;player.vx=0;player.vy=0;player.angle=0;},{passive:false});
+
+  // Use both touchstart and click for broader compatibility
+  btnTurbo.addEventListener("click", ()=>{ turboEnabled = !turboEnabled; updateButtonLabels(); });
+  btnMinimap.addEventListener("click", ()=>{ minimapEnabled = !minimapEnabled; updateButtonLabels(); });
+  btnPause.addEventListener("click", ()=>{ paused = !paused; updateButtonLabels(); });
+  btnReset.addEventListener("click", ()=>{ player.x=0; player.y=0; player.vx=0; player.vy=0; player.angle=0; });
+
+  // Also keep touchstart to feel instant on mobile
+  [btnTurbo, btnMinimap, btnPause, btnReset].forEach(btn=>{
+    btn.addEventListener("touchstart",(e)=>{ e.preventDefault(); e.stopPropagation(); btn.click(); },{passive:false});
+  });
+
   updateButtonLabels();
 
-  // Stars
-  const stars=[];
-  const starDensity=1.25e-5;
-  const totalStars=Math.floor((worldRadius*2)**2*starDensity);
-for (let i = 0; i < totalStars; i++) {
-  stars.push({
-    x: (Math.random() - 0.5) * worldRadius * 2,
-    y: (Math.random() - 0.5) * worldRadius * 2,
-    size: Math.random() * 5 + 1
-  });
-}// ============================
-// Sistemas estelares centralizados
-// ============================
-const systems = [
-  // Sistema Central (perto do spawn)
-  {
-    name: "Sistema Central",
-    sun: { x: -65000, y: -500, mass: 2000, radius: 1500, color: "yellow" },
-    planets: [
-      { name: "Mercúrio", distance: 6000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 200, color: "#E63946", mass: 30 },
-      { name: "Vênus",    distance: 10000, speed: 0.0002, angle: Math.random()*Math.PI*2, radius: 350, color: "#1D3557", mass: 40 },
-      { name: "Terra",    distance: 14000, speed: 0.00015, angle: Math.random()*Math.PI*2, radius: 400, color: "#6AFF00", mass: 40 },
-      { name: "Marte",    distance: 18000, speed: 0.00012, angle: Math.random()*Math.PI*2, radius: 300, color: "#FF7F11", mass: 26 }
-    ]
-  },
+  // Stars (optimized: cap total to avoid OOM/performance issues)
+  const stars = [];
+  const starDensity = 1.25e-5;
+  const estimatedTotalStars = Math.max(0, Math.floor((worldRadius*2)**2 * starDensity));
+  const MAX_STARS = 3000; // limite razoável para performance
+  const totalStars = Math.min(estimatedTotalStars, MAX_STARS);
 
-  // Sistema Boreal
-  {
-    name: "Sistema Boreal",
-    sun: { x: -70000, y: 80000, mass: 900, radius: 700, color: "#8FDBFF" },
-    planets: [
-      { name: "Aurion",  distance: 8000,  speed: 0.00022, angle: Math.random()*Math.PI*2, radius: 300, color: "#00F2FF", mass: 25 },
-      { name: "Gelmare", distance: 13000, speed: 0.00018, angle: Math.random()*Math.PI*2, radius: 420, color: "#7FF6FF", mass: 32 },
-      { name: "Kryst",   distance: 20000, speed: 0.00010, angle: Math.random()*Math.PI*2, radius: 600, color: "#AFFFFF", mass: 55 }
-    ]
-  },
-
-  // Sistema Rubrum
-  {
-    name: "Sistema Rubrum",
-    sun: { x: 60000, y: -70000, mass: 600, radius: 500, color: "#FF5C5C" },
-    planets: [
-      { name: "Scorn", distance: 5000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 180, color: "#FF0000", mass: 20 },
-      { name: "Balor", distance: 9000, speed: 0.00022, angle: Math.random()*Math.PI*2, radius: 300, color: "#FF7A00", mass: 28 },
-      { name: "Vulcar",distance: 15000, speed: 0.00016, angle: Math.random()*Math.PI*2, radius: 450, color: "#FFA200", mass: 40 }
-    ]
-  },
-
-  // Sistema Elyrium
-  {
-    name: "Sistema Elyrium",
-    sun: { x: 55000, y: 90000, mass: 1200, radius: 950, color: "#D7F1FF" },
-    planets: [
-      { name: "Shyra",   distance: 9000,  speed: 0.00024, angle: Math.random()*Math.PI*2, radius: 260, color: "#FFF7C0", mass: 24 },
-      { name: "Talyon",  distance: 17000, speed: 0.00018, angle: Math.random()*Math.PI*2, radius: 480, color: "#B8FF8E", mass: 45 },
-      { name: "Friela",  distance: 26000, speed: 0.00011, angle: Math.random()*Math.PI*2, radius: 700, color: "#A0C5FF", mass: 70 }
-    ]
-  },
-
-  // Sistema Arkan
-  {
-    name: "Sistema Arkan",
-    sun: { x: -50000, y: -90000, mass: 800, radius: 600, color: "#FFB469" },
-    planets: [
-      { name: "Rakef",  distance: 7000,  speed: 0.00037, angle: Math.random()*Math.PI*2, radius: 220, color: "#FF9248", mass: 28 },
-      { name: "Domare", distance: 13000, speed: 0.00019, angle: Math.random()*Math.PI*2, radius: 360, color: "#FFE560", mass: 40 },
-      { name: "Garon",  distance: 21000, speed: 0.00013, angle: Math.random()*Math.PI*2, radius: 520, color: "#FFD299", mass: 55 }
-    ]
-  },
-
-  // Sistema Colosso
-  {
-    name: "Sistema Colosso",
-    sun: { x: 90000, y: 20000, mass: 5000, radius: 3500, color: "#FF6B6B" },
-    planets: [
-      { name: "Torun",   distance: 16000, speed: 0.00014, angle: Math.random()*Math.PI*2, radius: 600, color: "#FFD000", mass: 85 },
-      { name: "Cryon",   distance: 30000, speed: 0.00010, angle: Math.random()*Math.PI*2, radius: 800, color: "#00FFE5", mass: 110 },
-      { name: "Velkar",  distance: 45000, speed: 0.00007, angle: Math.random()*Math.PI*2, radius: 950, color: "#7F00FF", mass: 150 }
-    ]
+  for (let i = 0; i < totalStars; i++) {
+    stars.push({
+      x: (Math.random() - 0.5) * worldRadius * 2,
+      y: (Math.random() - 0.5) * worldRadius * 2,
+      size: Math.random() * 2 + 0.5,
+      alpha: 0.6 + Math.random() * 0.4
+    });
   }
-];
+
+  // ============================
+  // Sistemas estelares centralizados
+  // ============================
+  const systems = [
+    // Sistema Central (perto do spawn)
+    {
+      name: "Sistema Central",
+      sun: { x: -65000, y: -500, mass: 2000, radius: 1500, color: "yellow" },
+      planets: [
+        { name: "Mercúrio", distance: 6000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 200, color: "#E63946", mass: 30 },
+        { name: "Vênus",    distance: 10000, speed: 0.0002, angle: Math.random()*Math.PI*2, radius: 350, color: "#1D3557", mass: 40 },
+        { name: "Terra",    distance: 14000, speed: 0.00015, angle: Math.random()*Math.PI*2, radius: 400, color: "#6AFF00", mass: 40 },
+        { name: "Marte",    distance: 18000, speed: 0.00012, angle: Math.random()*Math.PI*2, radius: 300, color: "#FF7F11", mass: 26 }
+      ]
+    },
+    // Outras sistemas...
+    {
+      name: "Sistema Boreal",
+      sun: { x: -70000, y: 80000, mass: 900, radius: 700, color: "#8FDBFF" },
+      planets: [
+        { name: "Aurion",  distance: 8000,  speed: 0.00022, angle: Math.random()*Math.PI*2, radius: 300, color: "#00F2FF", mass: 25 },
+        { name: "Gelmare", distance: 13000, speed: 0.00018, angle: Math.random()*Math.PI*2, radius: 420, color: "#7FF6FF", mass: 32 },
+        { name: "Kryst",   distance: 20000, speed: 0.00010, angle: Math.random()*Math.PI*2, radius: 600, color: "#AFFFFF", mass: 55 }
+      ]
+    },
+    {
+      name: "Sistema Rubrum",
+      sun: { x: 60000, y: -70000, mass: 600, radius: 500, color: "#FF5C5C" },
+      planets: [
+        { name: "Scorn", distance: 5000, speed: 0.0003, angle: Math.random()*Math.PI*2, radius: 180, color: "#FF0000", mass: 20 },
+        { name: "Balor", distance: 9000, speed: 0.00022, angle: Math.random()*Math.PI*2, radius: 300, color: "#FF7A00", mass: 28 },
+        { name: "Vulcar",distance: 15000, speed: 0.00016, angle: Math.random()*Math.PI*2, radius: 450, color: "#FFA200", mass: 40 }
+      ]
+    },
+    {
+      name: "Sistema Elyrium",
+      sun: { x: 55000, y: 90000, mass: 1200, radius: 950, color: "#D7F1FF" },
+      planets: [
+        { name: "Shyra",   distance: 9000,  speed: 0.00024, angle: Math.random()*Math.PI*2, radius: 260, color: "#FFF7C0", mass: 24 },
+        { name: "Talyon",  distance: 17000, speed: 0.00018, angle: Math.random()*Math.PI*2, radius: 480, color: "#B8FF8E", mass: 45 },
+        { name: "Friela",  distance: 26000, speed: 0.00011, angle: Math.random()*Math.PI*2, radius: 700, color: "#A0C5FF", mass: 70 }
+      ]
+    },
+    {
+      name: "Sistema Arkan",
+      sun: { x: -50000, y: -90000, mass: 800, radius: 600, color: "#FFB469" },
+      planets: [
+        { name: "Rakef",  distance: 7000,  speed: 0.00037, angle: Math.random()*Math.PI*2, radius: 220, color: "#FF9248", mass: 28 },
+        { name: "Domare", distance: 13000, speed: 0.00019, angle: Math.random()*Math.PI*2, radius: 360, color: "#FFE560", mass: 40 },
+        { name: "Garon",  distance: 21000, speed: 0.00013, angle: Math.random()*Math.PI*2, radius: 520, color: "#FFD299", mass: 55 }
+      ]
+    },
+    {
+      name: "Sistema Colosso",
+      sun: { x: 90000, y: 20000, mass: 5000, radius: 3500, color: "#FF6B6B" },
+      planets: [
+        { name: "Torun",   distance: 16000, speed: 0.00014, angle: Math.random()*Math.PI*2, radius: 600, color: "#FFD000", mass: 85 },
+        { name: "Cryon",   distance: 30000, speed: 0.00010, angle: Math.random()*Math.PI*2, radius: 800, color: "#00FFE5", mass: 110 },
+        { name: "Velkar",  distance: 45000, speed: 0.00007, angle: Math.random()*Math.PI*2, radius: 950, color: "#7F00FF", mass: 150 }
+      ]
+    }
+  ];
 
   // Joystick
-  const joyArea=document.getElementById("joystick-area");
-  const joyStick=document.getElementById("joystick-stick");
-  let joyCenter={x:0,y:0,r:60};
-  let joyActive=false;
-  const joystick={dx:0,dy:0,mag:0};
+  const joyArea = document.getElementById("joystick-area");
+  const joyStick = document.getElementById("joystick-stick");
+  let joyCenter = {x:0,y:0,r:60};
+  let joyActive = false;
+  const joystick = {dx:0,dy:0,mag:0, pointerId: null};
 
   function updateJoyCenter(){
     const r = joyArea.getBoundingClientRect();
-    joyCenter.x = r.left+r.width/2;
-    joyCenter.y = r.top+r.height/2;
-    joyCenter.r = Math.min(r.width,r.height)*0.38;
+    joyCenter.x = r.left + r.width/2;
+    joyCenter.y = r.top + r.height/2;
+    joyCenter.r = Math.min(r.width, r.height) * 0.38;
   }
   updateJoyCenter();
   window.addEventListener("resize", updateJoyCenter);
 
-  function joyStart(e){joyActive=true; handleJoyMove(e);}
-  function joyMove(e){if(!joyActive) return; handleJoyMove(e); e.preventDefault && e.preventDefault();}
-  function joyEnd(e){joyActive=false; joystick.dx=0;joystick.dy=0;joystick.mag=0; joyStick.style.transform=`translate(0px,0px)`;}
-
-  function handleJoyMove(e){
-    const touch=e.touches?e.touches[0]:e;
-    let x=touch.clientX-joyCenter.x;
-    let y=touch.clientY-joyCenter.y;
-    const dist=Math.sqrt(x*x+y*y);
-    const max=joyCenter.r||60;
-    const clamped=dist>max?max:dist;
-    joystick.dx=x/max; joystick.dy=y/max;
-    joystick.mag=Math.min(dist/max,1);
-    const tx=clamped*(x/(dist||1)), ty=clamped*(y/(dist||1));
-    joyStick.style.transform=`translate(${tx}px,${ty}px)`;
+  function handleJoyMovePoint(clientX, clientY){
+    let x = clientX - joyCenter.x;
+    let y = clientY - joyCenter.y;
+    const dist = Math.sqrt(x*x + y*y);
+    const max = joyCenter.r || 60;
+    const clamped = dist > max ? max : dist;
+    // avoid divide by zero
+    const invDist = dist === 0 ? 0 : 1 / dist;
+    joystick.dx = (x / max);
+    joystick.dy = (y / max);
+    joystick.mag = Math.min(dist / max, 1);
+    const tx = clamped * (x * invDist);
+    const ty = clamped * (y * invDist);
+    joyStick.style.transform = `translate(${tx}px,${ty}px)`;
   }
-  joyArea.addEventListener("touchstart",joyStart,{passive:false});
-  joyArea.addEventListener("touchmove",joyMove,{passive:false});
-  joyArea.addEventListener("touchend",joyEnd,{passive:false});
-  joyArea.addEventListener("touchcancel",joyEnd,{passive:false});
+
+  // Pointer events (covers mouse and touch and stylus)
+  joyArea.addEventListener("pointerdown", (e) => {
+    joyActive = true;
+    joystick.pointerId = e.pointerId;
+    joyArea.setPointerCapture && joyArea.setPointerCapture(e.pointerId);
+    handleJoyMovePoint(e.clientX, e.clientY);
+    e.preventDefault();
+  }, {passive:false});
+
+  joyArea.addEventListener("pointermove", (e) => {
+    if(!joyActive || joystick.pointerId !== e.pointerId) return;
+    handleJoyMovePoint(e.clientX, e.clientY);
+    e.preventDefault();
+  }, {passive:false});
+
+  joyArea.addEventListener("pointerup", (e) => {
+    if(joystick.pointerId !== e.pointerId) return;
+    joyActive = false;
+    joystick.pointerId = null;
+    joystick.dx = 0; joystick.dy = 0; joystick.mag = 0;
+    joyStick.style.transform = `translate(0px,0px)`;
+    e.preventDefault();
+  }, {passive:false});
+
+  // Keep legacy touch handlers as fallback
+  function touchStart(e){ joyActive=true; handleJoyMove(e.touches[0]); }
+  function touchMove(e){ if(!joyActive) return; handleJoyMove(e.touches[0]); e.preventDefault && e.preventDefault(); }
+  function touchEnd(e){ joyActive=false; joystick.dx=0;joystick.dy=0;joystick.mag=0; joyStick.style.transform=`translate(0px,0px)`; }
+
+  // Helpers for legacy fallback (not used if pointer events are available)
+  function handleJoyMove(touch){
+    handleJoyMovePoint(touch.clientX, touch.clientY);
+  }
 
   // Helpers
-  function normalizeAngle(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;}
+  function normalizeAngle(a){ while(a > Math.PI) a -= Math.PI*2; while(a < -Math.PI) a += Math.PI*2; return a; }
 
   // Game update
   function update(){
     if(paused) return;
-    const friction=0.999;
-    const acceleration=turboEnabled?25:0.5;
-    maxSpeed = turboEnabled?500.5:100.1;
-    friction=0;
 
-    if(joystick.mag>0.03){
-      const targetAngle=Math.atan2(joystick.dy,joystick.dx);
-      const angDiff=normalizeAngle(targetAngle-player.angle);
-      player.angle+=angDiff*0.25;
-      const thrust=joystick.mag*acceleration;
-      player.vx+=Math.cos(player.angle)*thrust;
-      player.vy+=Math.sin(player.angle)*thrust;
+    let friction = 0.999; // fix: use let so não error on reassignment if needed
+    const acceleration = turboEnabled ? 25 : 0.5;
+    maxSpeed = turboEnabled ? 500.5 : 100.1;
+    // (opcional) you could adjust friction when turbo is on:
+    // if (turboEnabled) friction = 0.9995;
+
+    if(joystick.mag > 0.03){
+      const targetAngle = Math.atan2(joystick.dy, joystick.dx);
+      const angDiff = normalizeAngle(targetAngle - player.angle);
+      player.angle += angDiff * 0.25;
+      const thrust = joystick.mag * acceleration;
+      player.vx += Math.cos(player.angle) * thrust;
+      player.vy += Math.sin(player.angle) * thrust;
     }
 
     // Limit speed
-    let speed=Math.hypot(player.vx,player.vy);
-    if(speed>maxSpeed){const scale=maxSpeed/speed; player.vx*=scale;player.vy*=scale;}
+    let speed = Math.hypot(player.vx, player.vy);
+    if(speed > maxSpeed){ const scale = maxSpeed / speed; player.vx *= scale; player.vy *= scale; }
 
     // Gravity
-    const G=5000;
-    const applyGravity=(m,x,y)=>{
-      const dx=x-player.x, dy=y-player.y;
-      const distSq=dx*dx+dy*dy; const dist=Math.sqrt(distSq);
-      if(dist>20){
-        const force=(G*m)/distSq;
-        player.vx+=(dx/dist)*force; player.vy+=(dy/dist)*force;
+    const G = 5000; // mantive mas você pode ajustar para tuning
+    const applyGravity = (m, x, y) => {
+      const dx = x - player.x, dy = y - player.y;
+      const distSq = dx*dx + dy*dy;
+      const dist = Math.sqrt(distSq);
+      if(dist > 20){ // evita singularidade
+        const force = (G * m) / distSq;
+        player.vx += (dx / dist) * force;
+        player.vy += (dy / dist) * force;
       }
     };
+
     for(let system of systems){
       applyGravity(system.sun.mass, system.sun.x, system.sun.y);
       for(let planet of system.planets){
-        const px=system.sun.x+planet.distance*Math.cos(planet.angle);
-        const py=system.sun.y+planet.distance*Math.sin(planet.angle);
+        const px = system.sun.x + planet.distance * Math.cos(planet.angle);
+        const py = system.sun.y + planet.distance * Math.sin(planet.angle);
         applyGravity(planet.mass, px, py);
       }
     }
 
-    // Move player
-    player.vx*=friction; player.vy*=friction;
-    player.x+=player.vx; player.y+=player.vy;
+    // Apply friction and move player
+    player.vx *= friction; player.vy *= friction;
+    player.x += player.vx; player.y += player.vy;
 
     // Collisions
     for(let system of systems){
-      const sun=system.sun;
-      const distSun=Math.hypot(player.x-sun.x,player.y-sun.y);
-      if(distSun<sun.radius){
-        const angleOut=Math.atan2(player.y-sun.y,player.x-sun.x);
-        player.x=sun.x+Math.cos(angleOut)*(sun.radius+1);
-        player.y=sun.y+Math.sin(angleOut)*(sun.radius+1);
-        player.vx=0;player.vy=0;
+      const sun = system.sun;
+      const distSun = Math.hypot(player.x - sun.x, player.y - sun.y);
+      if(distSun < sun.radius){
+        const angleOut = Math.atan2(player.y - sun.y, player.x - sun.x);
+        player.x = sun.x + Math.cos(angleOut) * (sun.radius + 1);
+        player.y = sun.y + Math.sin(angleOut) * (sun.radius + 1);
+        player.vx = 0; player.vy = 0;
       }
       for(let planet of system.planets){
-        const px=sun.x+planet.distance*Math.cos(planet.angle);
-        const py=sun.y+planet.distance*Math.sin(planet.angle);
-        const d=Math.hypot(player.x-px,player.y-py);
-        if(d<planet.radius){
-          const angleOut=Math.atan2(player.y-py,player.x-px);
-          player.x=px+Math.cos(angleOut)*planet.radius;
-          player.y=py+Math.sin(angleOut)*planet.radius;
-          const orbitalVx=-Math.sin(planet.angle)*planet.speed*planet.distance;
-          const orbitalVy=Math.cos(planet.angle)*planet.speed*planet.distance;
-          player.vx+=(orbitalVx-player.vx)*0.1;
-          player.vy+=(orbitalVy-player.vy)*0.1;
-          player.vx*=0.98; player.vy*=0.98;
+        const px = sun.x + planet.distance * Math.cos(planet.angle);
+        const py = sun.y + planet.distance * Math.sin(planet.angle);
+        const d = Math.hypot(player.x - px, player.y - py);
+        if(d < planet.radius){
+          const angleOut = Math.atan2(player.y - py, player.x - px);
+          player.x = px + Math.cos(angleOut) * planet.radius;
+          player.y = py + Math.sin(angleOut) * planet.radius;
+          const orbitalVx = -Math.sin(planet.angle) * planet.speed * planet.distance;
+          const orbitalVy = Math.cos(planet.angle) * planet.speed * planet.distance;
+          player.vx += (orbitalVx - player.vx) * 0.1;
+          player.vy += (orbitalVy - player.vy) * 0.1;
+          player.vx *= 0.98; player.vy *= 0.98;
         }
       }
     }
 
     // World borders
-    if(player.x<-worldRadius){player.x=-worldRadius+1000;player.vx*=-1;}
-    if(player.x>worldRadius){player.x=worldRadius-1000;player.vx*=-1;}
-    if(player.y<-worldRadius){player.y=-worldRadius+1000;player.vy*=-1;}
-    if(player.y>worldRadius){player.y=worldRadius-1000;player.vy*=-1;}
+    if(player.x < -worldRadius){ player.x = -worldRadius + 1000; player.vx *= -1; }
+    if(player.x > worldRadius){ player.x = worldRadius - 1000; player.vx *= -1; }
+    if(player.y < -worldRadius){ player.y = -worldRadius + 1000; player.vy *= -1; }
+    if(player.y > worldRadius){ player.y = worldRadius - 1000; player.vy *= -1; }
 
     // Advance planets
-    for(let system of systems) for(let planet of system.planets) planet.angle+=planet.speed;
+    for(let system of systems) for(let planet of system.planets) planet.angle += planet.speed;
   }
 
   // Draw
   function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    const offsetX=canvas.width/2-player.x;
-    const offsetY=canvas.height/2-player.y;
+    const offsetX = canvas.width/2 - player.x;
+    const offsetY = canvas.height/2 - player.y;
 
     // Grid
-    const gridSpacing=500, range=3000;
-    const startX=Math.floor((player.x-range)/gridSpacing)*gridSpacing;
-    const endX=Math.floor((player.x+range)/gridSpacing)*gridSpacing;
-    const startY=Math.floor((player.y-range)/gridSpacing)*gridSpacing;
-    const endY=Math.floor((player.y+range)/gridSpacing)*gridSpacing;
-    ctx.strokeStyle="#222"; ctx.lineWidth=1.5;
-    for(let x=startX;x<=endX;x+=gridSpacing){ctx.beginPath();ctx.moveTo(x+offsetX,0);ctx.lineTo(x+offsetX,canvas.height);ctx.stroke();}
-    for(let y=startY;y<=endY;y+=gridSpacing){ctx.beginPath();ctx.moveTo(0,y+offsetY);ctx.lineTo(canvas.width,y+offsetY);ctx.stroke();}
+    const gridSpacing = 500, range = 3000;
+    const startX = Math.floor((player.x - range) / gridSpacing) * gridSpacing;
+    const endX = Math.floor((player.x + range) / gridSpacing) * gridSpacing;
+    const startY = Math.floor((player.y - range) / gridSpacing) * gridSpacing;
+    const endY = Math.floor((player.y + range) / gridSpacing) * gridSpacing;
+    ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+    for(let x = startX; x <= endX; x += gridSpacing){ ctx.beginPath(); ctx.moveTo(x + offsetX, 0); ctx.lineTo(x + offsetX, canvas.height); ctx.stroke(); }
+    for(let y = startY; y <= endY; y += gridSpacing){ ctx.beginPath(); ctx.moveTo(0, y + offsetY); ctx.lineTo(canvas.width, y + offsetY); ctx.stroke(); }
 
-    // Stars
-    ctx.fillStyle="white";
-    for(let star of stars){const sx=star.x+offsetX,sy=star.y+offsetY; if(sx>=-10 && sx<=canvas.width+10 && sy>=-10 && sy<=canvas.height+10){ctx.beginPath();ctx.arc(sx,sy,star.size,0,Math.PI*2);ctx.fill();}}
+    // Stars (apenas desenha as que estão visíveis, por performance)
+    for(let star of stars){
+      const sx = star.x + offsetX, sy = star.y + offsetY;
+      if(sx < -10 || sx > canvas.width + 10 || sy < -10 || sy > canvas.height + 10) continue;
+      ctx.globalAlpha = star.alpha;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(sx, sy, star.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
-    // Systems
+    // Systems (suns and planets)
     for(let system of systems){
-      const sun=system.sun;
-      ctx.beginPath(); ctx.arc(sun.x+offsetX,sun.y+offsetY,sun.radius,0,Math.PI*2); ctx.fillStyle=sun.color; ctx.fill();
-      for(let planet of system.planets){
-        const x=sun.x+planet.distance*Math.cos(planet.angle);
-        const y=sun.y+planet.distance*Math.sin(planet.angle);
-        ctx.beginPath(); ctx.arc(x+offsetX,y+offsetY,planet.radius,0,Math.PI*2); ctx.fillStyle=planet.color; ctx.fill();
+      const sun = system.sun;
+      const sx = sun.x + offsetX, sy = sun.y + offsetY;
+      // culling — desenha apenas se dentro do viewport com um buffer
+      if(sx < -2000 || sx > canvas.width + 2000 || sy < -2000 || sy > canvas.height + 2000) {
+        // still advance planet angles; drawing skipped
+      } else {
+        ctx.beginPath(); ctx.arc(sx, sy, sun.radius, 0, Math.PI*2); ctx.fillStyle = sun.color; ctx.fill();
+        for(let planet of system.planets){
+          const px = sun.x + planet.distance * Math.cos(planet.angle);
+          const py = sun.y + planet.distance * Math.sin(planet.angle);
+          const drawX = px + offsetX, drawY = py + offsetY;
+          if(drawX < -100 || drawX > canvas.width + 100 || drawY < -100 || drawY > canvas.height + 100) continue;
+          ctx.beginPath(); ctx.arc(drawX, drawY, planet.radius, 0, Math.PI*2); ctx.fillStyle = planet.color; ctx.fill();
+        }
       }
     }
 
     // Ship
-    ctx.save(); ctx.translate(canvas.width/2,canvas.height/2); ctx.rotate(player.angle);
-    ctx.fillStyle="lime"; ctx.beginPath(); ctx.moveTo(15,0); ctx.lineTo(-10,-7); ctx.lineTo(-10,7); ctx.closePath(); ctx.fill(); ctx.restore();
+    ctx.save();
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.rotate(player.angle);
+    ctx.fillStyle = "lime";
+    ctx.beginPath();
+    ctx.moveTo(18,0);
+    ctx.lineTo(-10,-9);
+    ctx.lineTo(-6,0);
+    ctx.lineTo(-10,9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
 
-    drawBorderEffect(); drawHUD(); if(minimapEnabled) drawMinimap();
+    drawBorderEffect();
+    drawHUD();
+    if(minimapEnabled) drawMinimap();
   }
 
   function drawBorderEffect(){
-    const maxEffectDistance=2000;
-    const distToLeft=player.x+worldRadius;
-    const distToRight=worldRadius-player.x;
-    const distToTop=player.y+worldRadius;
-    const distToBottom=worldRadius-player.y;
-    const minDist=Math.min(distToLeft,distToRight,distToTop,distToBottom);
-    if(minDist<maxEffectDistance){const opacity=1-minDist/maxEffectDistance; ctx.fillStyle=`rgba(128,0,128,${Math.max(0,Math.min(1,opacity))})`; ctx.fillRect(0,0,canvas.width,canvas.height);}
+    const maxEffectDistance = 2000;
+    const distToLeft = player.x + worldRadius;
+    const distToRight = worldRadius - player.x;
+    const distToTop = player.y + worldRadius;
+    const distToBottom = worldRadius - player.y;
+    const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+    if(minDist < maxEffectDistance){
+      const opacity = 1 - minDist / maxEffectDistance;
+      ctx.fillStyle = `rgba(128,0,128,${Math.max(0, Math.min(1, opacity))})`;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
   }
 
   function drawHUD(){
-    document.getElementById("velocidade").textContent="Velocidade: "+Math.hypot(player.vx,player.vy).toFixed(2);
-    document.getElementById("coordX").textContent="X: "+player.x.toFixed(1);
-    document.getElementById("coordY").textContent="Y: "+player.y.toFixed(1);
-    const turboEl=document.getElementById("turbo");
-    if(turboEnabled){turboEl.textContent="TURBO"; turboEl.style.color="deepskyblue";}
-    else{turboEl.textContent=""; turboEl.style.color="";}
+    document.getElementById("velocidade").textContent = "Velocidade: " + Math.hypot(player.vx, player.vy).toFixed(2);
+    document.getElementById("coordX").textContent = "X: " + player.x.toFixed(1);
+    document.getElementById("coordY").textContent = "Y: " + player.y.toFixed(1);
+    const turboEl = document.getElementById("turbo");
+    if(turboEnabled){ turboEl.textContent = "TURBO"; turboEl.style.color = "deepskyblue"; }
+    else{ turboEl.textContent = ""; turboEl.style.color = ""; }
   }
 
   function drawMinimap(){
-    const radius=100;
-    const scale=radius/200000;
-    const centerX=canvas.width-radius-20;
-    const centerY=radius+20;
+    const radius = 100;
+    const worldScale = Math.max(worldRadius*2, 1);
+    const scale = radius / worldScale * 2; // garante que o minimapa mostre todo o mundo (ajustar conforme desejado)
+    const centerX = canvas.width - radius - 20;
+    const centerY = radius + 20;
 
     ctx.save();
     ctx.beginPath();
-    ctx.arc(centerX,centerY,radius,0,Math.PI*2);
+    ctx.arc(centerX, centerY, radius, 0, Math.PI*2);
     ctx.clip();
 
-    ctx.fillStyle="rgba(0,0,0,0.7)";
-    ctx.fillRect(centerX-radius,centerY-radius,radius*2,radius*2);
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(centerX - radius, centerY - radius, radius*2, radius*2);
 
-    // Draw suns
+    // Draw suns and planets on minimap
     for(let system of systems){
-      const sun=system.sun;
-      ctx.fillStyle=sun.color;
+      const sun = system.sun;
+      const mx = centerX + (sun.x - player.x) * scale;
+      const my = centerY + (sun.y - player.y) * scale;
+      ctx.fillStyle = sun.color;
       ctx.beginPath();
-      ctx.arc(centerX + (sun.x - player.x)*scale, centerY + (sun.y - player.y)*scale, Math.max(sun.radius*scale,3),0,Math.PI*2);
+      ctx.arc(mx, my, Math.max(sun.radius * scale, 2), 0, Math.PI*2);
       ctx.fill();
 
       for(let planet of system.planets){
-        const px=sun.x + planet.distance*Math.cos(planet.angle);
-        const py=sun.y + planet.distance*Math.sin(planet.angle);
-        ctx.fillStyle=planet.color;
+        const px = sun.x + planet.distance * Math.cos(planet.angle);
+        const py = sun.y + planet.distance * Math.sin(planet.angle);
+        const pmx = centerX + (px - player.x) * scale;
+        const pmy = centerY + (py - player.y) * scale;
+        ctx.fillStyle = planet.color;
         ctx.beginPath();
-        ctx.arc(centerX + (px - player.x)*scale, centerY + (py - player.y)*scale, Math.max(planet.radius*scale,2),0,Math.PI*2);
+        ctx.arc(pmx, pmy, Math.max(planet.radius * scale, 1.2), 0, Math.PI*2);
         ctx.fill();
       }
     }
 
-    ctx.fillStyle="lime";
+    ctx.fillStyle = "lime";
     ctx.beginPath();
-    ctx.arc(centerX,centerY,2.5,0,Math.PI*2);
+    ctx.arc(centerX, centerY, 3, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
 
-    ctx.strokeStyle="white"; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.arc(centerX,centerY,radius,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = "white"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, Math.PI*2); ctx.stroke();
   }
 
   function loop(){
-    if(!paused){update(); draw();}
+    if(!paused){ update(); draw(); }
     requestAnimationFrame(loop);
   }
-
   loop();
 
   // Prevent double-tap zoom on mobile
-  let lastTouch=0;
-  document.addEventListener('touchend',(e)=>{
-    const now=Date.now();
-    if(now-lastTouch<=300) e.preventDefault();
-    lastTouch=now;
-  },{passive:false});
+  let lastTouch = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if(now - lastTouch <= 300) e.preventDefault();
+    lastTouch = now;
+  }, { passive: false });
+
+  // Accessibility: allow toggles by keyboard (space/enter) when focused
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 't') { turboEnabled = !turboEnabled; updateButtonLabels(); }
+    if(e.key === 'm') { minimapEnabled = !minimapEnabled; updateButtonLabels(); }
+    if(e.key === 'p') { paused = !paused; updateButtonLabels(); }
+    if(e.key === 'r') { player.x=0;player.y=0;player.vx=0;player.vy=0;player.angle=0; }
+  });
+
 </script>
 </body>
 </html>
